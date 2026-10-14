@@ -1,0 +1,3019 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>国际象棋教练板 · 边下边讲</title>
+<style>
+  :root{
+    --bg:#F5F1EA; --panel:#FFFFFF; --panel2:#FBF8F2;
+    --ink:#201E1B; --sub:#6E675D; --faint:#9A9186;
+    --line:#E8E2D7; --line2:#F1ECE3;
+    --accent:#2F6B4F; --accent-soft:#E8F0EA;
+    --warn:#A96A1E; --warn-soft:#FBF0DF;
+    --bad:#A8402F; --bad-soft:#FAEAE6;
+    --gold:#B98B2E;
+    --sq-light:#EEE1C9; --sq-dark:#AE8558;
+    --sel:#E9C46A; --dot:rgba(56,44,28,.30);
+    --radius:18px;
+    --shadow:0 1px 2px rgba(40,32,20,.05), 0 12px 32px -18px rgba(40,32,20,.35);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  /* hidden 必须真的生效：作者样式里的 display 会盖掉 UA 的 [hidden] */
+  [hidden]{display:none!important}
+  body{
+    background:
+      radial-gradient(1200px 600px at 12% -10%, #FFFDF8 0%, rgba(255,253,248,0) 60%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Inter","Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    padding:28px 24px 48px;
+  }
+  .wrap{max-width:1180px;margin:0 auto}
+
+  /* ---------- header ---------- */
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:22px}
+  .brand{display:flex;align-items:center;gap:14px}
+  .mark{
+    width:46px;height:46px;border-radius:14px;flex:0 0 auto;
+    background:linear-gradient(150deg,#2E3A33,#1B211D);
+    color:#F4EFE4;display:grid;place-items:center;font-size:26px;line-height:1;
+    box-shadow:0 8px 20px -10px rgba(30,26,20,.7);
+  }
+  h1{margin:0;font-size:21px;letter-spacing:.2px;font-weight:650}
+  .sub{margin:4px 0 0;font-size:13px;color:var(--sub);letter-spacing:.15px}
+  .top-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+  /* ---------- controls ---------- */
+  button,select{
+    font:inherit;font-size:13px;color:var(--ink);
+    background:var(--panel);border:1px solid var(--line);
+    padding:9px 14px;border-radius:11px;cursor:pointer;
+    transition:.16s ease;letter-spacing:.15px;
+  }
+  button:hover{border-color:#D6CDBE;transform:translateY(-1px);box-shadow:0 6px 16px -10px rgba(40,32,20,.55)}
+  button:active{transform:translateY(0)}
+  button:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{border-color:#28583F;background:#2A5F46}
+  select{padding-right:10px;background-image:none}
+
+  /* ---------- layout ---------- */
+  .app{display:grid;grid-template-columns:minmax(340px,1fr) minmax(360px,1.02fr);gap:26px;align-items:start}
+  @media (max-width:940px){ .app{grid-template-columns:1fr} body{padding:20px 16px 40px} }
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .boardcard{padding:18px}
+
+  /* ---------- player strips ---------- */
+  .strip{display:flex;align-items:center;gap:12px;min-height:46px;padding:2px 4px}
+  .avatar{
+    width:34px;height:34px;border-radius:11px;flex:0 0 auto;display:grid;place-items:center;
+    font-size:18px;border:1px solid var(--line)
+  }
+  .avatar.b{background:#2A2723;color:#F1ECE1;border-color:#2A2723}
+  .avatar.w{background:#FBF7EF;color:#2A2723}
+  .who{font-size:13.5px;font-weight:600;letter-spacing:.2px}
+  .who small{display:block;font-weight:400;color:var(--faint);font-size:11.5px;letter-spacing:.2px;margin-top:1px}
+  .tray{flex:1;display:flex;align-items:center;gap:1px;flex-wrap:wrap;font-size:17px;line-height:1;color:#8C8377;min-height:22px}
+  .adv{font-size:12.5px;color:var(--sub);font-variant-numeric:tabular-nums}
+  .chip{
+    font-size:11.5px;letter-spacing:.3px;padding:4px 9px;border-radius:999px;
+    background:var(--accent-soft);color:var(--accent);border:1px solid #D5E4DA;white-space:nowrap
+  }
+  .chip.think{background:var(--warn-soft);color:var(--warn);border-color:#EFDDC0}
+  .chip.over{background:#F0EDE6;color:var(--sub);border-color:var(--line)}
+
+  /* ---------- board ---------- */
+  .boardwrap{margin:10px 0;position:relative}
+  .board{
+    display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);
+    aspect-ratio:1/1;width:100%;border-radius:12px;overflow:hidden;
+    box-shadow:0 0 0 1px #8E6A45, 0 18px 40px -22px rgba(60,42,22,.75);
+    user-select:none;
+  }
+  .sq{position:relative;display:grid;place-items:center;cursor:default}
+  .sq.l{background:var(--sq-light)}
+  .sq.d{background:var(--sq-dark)}
+  .sq.movable{cursor:pointer}
+  .sq .co{position:absolute;font-size:10.5px;font-weight:700;opacity:.55;letter-spacing:.5px;
+    text-shadow:0 1px 0 rgba(255,255,255,.25)}
+  .sq .co.f{right:4px;bottom:3px}
+  .sq .co.r{left:4px;top:3px}
+  .sq.l .co{color:#8A6A44}
+  .sq.d .co{color:#F5EAD6}
+  .piece{
+    font-size:var(--pcs,40px);line-height:1;
+    font-family:"Segoe UI Symbol","Apple Symbols","Noto Sans Symbols 2","Arial Unicode MS",serif;
+    transition:transform .12s ease;
+    pointer-events:none;position:relative;z-index:2;
+  }
+  .piece.w{color:#FFFDF8;-webkit-text-stroke:1.6px #2C2A26;text-shadow:0 2px 3px rgba(0,0,0,.30)}
+  .piece.b{color:#2A2723;-webkit-text-stroke:1.2px #100F0D;text-shadow:0 2px 3px rgba(0,0,0,.28)}
+  .sq.movable:hover .piece{transform:translateY(-2px)}
+
+  .sq.last{box-shadow:inset 0 0 0 100px rgba(233,196,106,.30)}
+  .sq.sel{box-shadow:inset 0 0 0 3px var(--sel)}
+  .sq.hint{box-shadow:inset 0 0 0 3px #4E8BC4}
+  /* 规则手册的「这一步怎么走」：起格描环、落格描环 + 填色，再叠一层箭头 */
+  .sq.hintFrom{box-shadow:inset 0 0 0 3px #2C6CA8, inset 0 0 0 100px rgba(44,108,168,.22)}
+  .sq.hintTo{box-shadow:inset 0 0 0 3px #2C6CA8, inset 0 0 0 100px rgba(44,108,168,.34)}
+  .hintArrow{position:absolute;inset:0;z-index:4;pointer-events:none;display:none}
+  .sq.mv::after{
+    content:"";width:30%;height:30%;border-radius:50%;
+    background:var(--dot);position:absolute;z-index:3
+  }
+  .sq.cap::after{
+    width:82%;height:82%;border-radius:50%;background:transparent;
+    box-shadow:inset 0 0 0 5px var(--dot)
+  }
+  .sq.check::before{
+    content:"";position:absolute;inset:0;z-index:1;
+    background:radial-gradient(circle at 50% 50%, rgba(200,52,32,.92) 0%, rgba(200,52,32,.55) 42%, rgba(200,52,32,0) 72%)
+  }
+  .sq.pop .piece{animation:pop .2s ease}
+  @keyframes pop{from{transform:scale(.9)}to{transform:scale(1)}}
+
+  .promo{
+    position:absolute;inset:0;z-index:9;background:rgba(28,24,18,.55);
+    display:grid;place-items:center;border-radius:12px;backdrop-filter:blur(2px)
+  }
+  .promo .box{background:var(--panel);border-radius:14px;padding:14px 16px;text-align:center;box-shadow:var(--shadow)}
+  .promo .box p{margin:0 0 10px;font-size:12.5px;color:var(--sub);letter-spacing:.2px}
+  .promo .row{display:flex;gap:8px}
+  .promo .row button{width:52px;height:52px;padding:0;font-size:30px;line-height:1;border-radius:12px;
+    font-family:"Segoe UI Symbol","Arial Unicode MS",serif;background:var(--panel2)}
+
+  .ctl{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+  .ctl button{flex:0 0 auto}
+  .ctl button.sm{padding:8px 11px;font-size:12.5px}
+  .ctl .grow{flex:1 1 auto}
+  .ctl label{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--sub)}
+
+  /* ---------- coach panel ---------- */
+  /* 右栏高度 = 视口 − 上边距(28) − 标题(68) − 模式条(68) − 下留白(48)，正好不出屏 */
+  .panel{display:flex;flex-direction:column;overflow:hidden;height:calc(100vh - 212px);min-height:560px}
+  .panel-hd{
+    flex:0 0 auto;
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:14px 20px;border-bottom:1px solid var(--line2);background:linear-gradient(180deg,#FFFDF9,#FFFFFF)
+  }
+  .panel-hd h2{margin:0;font-size:14px;font-weight:650;letter-spacing:.4px;display:flex;align-items:center;gap:8px}
+  .panel-hd .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .panel-hd .meta{font-size:11.5px;color:var(--faint);letter-spacing:.3px;font-variant-numeric:tabular-nums;text-align:right}
+
+  /* 局面体检：常驻，不随解说滚动 */
+  .audit{
+    flex:0 0 auto;background:var(--panel2);border-bottom:1px solid var(--line2);padding:11px 18px 12px;
+    max-height:46vh;overflow-y:auto
+  }
+  .audit .a-hd{font-size:10.5px;letter-spacing:1.2px;color:var(--faint);text-transform:uppercase;margin-bottom:7px}
+  .audit .row{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:1.6;color:#3A352E;margin-top:5px}
+  .audit .row .ic{flex:0 0 auto;width:13px;text-align:center;font-size:11px;line-height:1.7;color:var(--faint)}
+  .audit .row.bad .ic{color:var(--bad)}
+  .audit .row.good .ic{color:var(--accent)}
+  .audit .row.bad b{color:var(--bad)}
+  .audit .row.good b{color:var(--accent)}
+  .audit b{font-weight:650}
+  .audit .muted{color:var(--faint)}
+  .audit .line{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;color:#2E3A33}
+
+  .feed{flex:1 1 auto;min-height:110px;overflow-y:auto;padding:16px 20px 8px;display:flex;flex-direction:column;gap:14px}
+  .feed::-webkit-scrollbar{width:9px}
+  .feed::-webkit-scrollbar-thumb{background:#E3DBCD;border-radius:9px;border:2px solid #fff}
+
+  .msg{display:flex;gap:10px;align-items:flex-start;animation:rise .26s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+  .msg .av{
+    width:26px;height:26px;border-radius:9px;flex:0 0 auto;display:grid;place-items:center;font-size:14px;
+    background:#2E3A33;color:#F2EDE2
+  }
+  .msg.me .av{background:#EFE7D8;color:#3A342B}
+  .msg .body{min-width:0;flex:1}
+  .msg .hdr{display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap}
+  .msg .nm{font-size:12px;font-weight:650;letter-spacing:.3px}
+  .msg .tag{font-size:10.5px;letter-spacing:.4px;padding:2px 7px;border-radius:999px;border:1px solid var(--line);color:var(--sub);background:var(--panel2)}
+  .msg .tag.good{color:var(--accent);border-color:#D2E3D8;background:var(--accent-soft)}
+  .msg .tag.warn{color:var(--warn);border-color:#EFDDC0;background:var(--warn-soft)}
+  .msg .tag.bad{color:var(--bad);border-color:#F0D3CC;background:var(--bad-soft)}
+  .msg .tag.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;letter-spacing:0}
+  .msg .txt{font-size:13.5px;line-height:1.72;color:#332F29;letter-spacing:.15px}
+  .msg .txt b{font-weight:650;color:#1D1A16}
+  .msg .txt .san{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    background:#F4F0E8;border:1px solid #EAE3D6;border-radius:6px;padding:1px 6px;font-size:12.5px;color:#2E3A33
+  }
+  .msg .txt .k{color:var(--accent);font-weight:600}
+  .msg .txt .r{color:var(--bad);font-weight:600}
+  .msg .txt .y{color:var(--warn);font-weight:600}
+  .msg .why{
+    margin-top:8px;border-left:2px solid #DDD5C6;padding:2px 0 2px 11px;
+    font-size:12.5px;line-height:1.7;color:var(--sub)
+  }
+  .msg .why em{font-style:normal;color:#4A443B;font-weight:600}
+
+  /* 棋谱：折叠 + 限高 + 内部滚动，绝不吃掉解说的空间 */
+  .movesblock{
+    flex:0 0 auto;border-top:1px solid var(--line2);background:var(--panel2);
+    border-radius:0 0 var(--radius) var(--radius);display:flex;flex-direction:column
+  }
+  .movesblock .mh{
+    display:flex;align-items:center;gap:9px;padding:10px 18px;cursor:pointer;user-select:none;
+    font-size:10.5px;letter-spacing:1.2px;color:var(--faint);text-transform:uppercase
+  }
+  .movesblock .mh:hover{color:var(--sub)}
+  .movesblock .mh .caret{margin-left:auto;transition:transform .18s ease;font-size:9px}
+  .movesblock.collapsed .mh .caret{transform:rotate(-90deg)}
+  .moves{max-height:152px;overflow-y:auto;padding:0 18px 10px}
+  .moves::-webkit-scrollbar{width:9px}
+  .moves::-webkit-scrollbar-thumb{background:#E3DBCD;border-radius:9px;border:2px solid #FBF8F2}
+  .movesblock.collapsed .moves{display:none}
+  .moves table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .moves td{padding:4px 6px;vertical-align:top;font-variant-numeric:tabular-nums}
+  .moves td.n{width:34px;color:var(--faint);text-align:right;font-size:11.5px;padding-right:10px}
+  .moves td.m{width:50%;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#2B2721}
+  .moves td.m span{display:inline-block}
+  .moves .cur{background:#FBEFD8;border-radius:6px}
+  .moves .emptyrow{color:var(--faint);font-size:12px;padding:4px 0}
+  .moves details summary{
+    cursor:pointer;font-size:11.5px;color:var(--sub);letter-spacing:.3px;padding:8px 0 2px;list-style:none
+  }
+  .moves details summary::-webkit-details-marker{display:none}
+  .moves details summary::before{content:"▸ ";color:var(--faint)}
+  .moves details[open] summary::before{content:"▾ "}
+  .moves ul{margin:6px 0 2px;padding-left:18px;font-size:12px;line-height:1.85;color:#4A443B}
+  .moves ul b{color:var(--accent)}
+
+  .status{
+    display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--faint);letter-spacing:.3px
+  }
+
+  /* ---------- 模式切换条 ---------- */
+  .modes{
+    display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 20px;
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px;box-shadow:var(--shadow)
+  }
+  .modes button{border:0;background:transparent;padding:9px 15px;border-radius:10px;font-size:13px;color:var(--sub);font-weight:600}
+  .modes button:hover{background:var(--panel2);box-shadow:none;transform:none;color:var(--ink);border-color:transparent}
+  .modes button.on{background:var(--accent);color:#fff}
+  .modes button.on:hover{background:#2A5F46}
+  /* 规则手册里「当前正在看的那一支示范」 */
+  .ctl button.on{background:var(--accent-soft);border-color:#B9CFC1;color:var(--accent);font-weight:650}
+  .modes .sp{flex:1}
+  .modes .cnt{font-size:11.5px;color:var(--faint);padding:0 10px;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+  /* ---------- 题目简报 / 课程要点 ---------- */
+  .brief{display:flex;flex-direction:column;gap:7px}
+  .brief .goal{font-size:13.5px;line-height:1.66;color:#332F29;letter-spacing:.1px}
+  .brief .goal em{font-style:normal;color:var(--accent);font-weight:650}
+  .brief .tagline{
+    display:inline-flex;align-items:center;gap:6px;align-self:flex-start;font-size:11px;letter-spacing:.3px;
+    padding:3px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);border:1px solid #D5E4DA
+  }
+  .brief .tagline.warn{background:var(--warn-soft);color:var(--warn);border-color:#EFDDC0}
+  .brief .ln{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;color:#2E3A33;letter-spacing:.2px}
+  .points{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+  .points li{display:flex;gap:9px;font-size:12.5px;line-height:1.68;color:#3A352E}
+  .points li b{color:var(--accent);font-weight:650}
+  .points .n{
+    flex:0 0 auto;width:18px;height:18px;border-radius:6px;background:var(--accent-soft);color:var(--accent);
+    font-size:10.5px;display:grid;place-items:center;font-weight:700;margin-top:2px
+  }
+  /* 课程「要点」：常驻在顶部简报栏里，带序号，读起来是一条一条的 */
+  .points.pts{margin-top:9px;padding-top:9px;border-top:1px solid var(--line2)}
+  .points .pt{display:flex;gap:9px;font-size:12.5px;line-height:1.72;color:#3A352E}
+  .points .pt b{color:var(--accent);font-weight:650}
+  .points .pt .n{
+    flex:0 0 auto;width:17px;height:17px;border-radius:6px;background:var(--accent-soft);color:var(--accent);
+    font-size:10.5px;display:grid;place-items:center;font-weight:700;margin-top:2px
+  }
+  /* 展开记谱法对照表时，给棋谱区更多高度，不然表格被 152px 卡住 */
+  .movesblock:has(details[open]) .moves{max-height:min(46vh,360px)}
+
+  /* ---------- 记谱法图例 ---------- */
+  .legend{font-size:12.5px;line-height:1.85;color:#4A443B;padding-bottom:4px}
+  .legend p{margin:0 0 8px}
+  .legend table{width:100%;border-collapse:collapse}
+  .legend td{padding:3px 10px 3px 0;vertical-align:top;border-bottom:1px solid var(--line2)}
+  .legend td:first-child{width:96px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#2E3A33;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="mark">♞</div>
+      <div>
+        <h1>国际象棋教练板</h1>
+        <p class="sub">你走一步，我回一步 —— 每一步都告诉你怎么走、为什么这么走</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <label class="status" for="level" id="levelLabel">对手强度</label>
+      <select id="level" title="对手强度：三档用的是同一个引擎，差别只在给它多少思考时间">
+        <option value="1">入门 · 会走次优</option>
+        <option value="2" selected>进阶 · 稳</option>
+        <option value="3">较强 · 算得深</option>
+      </select>
+      <button id="btnSwap" title="换边重开">换边</button>
+      <button id="btnNew" class="primary">新对局</button>
+    </div>
+  </header>
+
+  <nav class="modes" id="modes">
+    <button data-mode="play" class="on">对弈</button>
+    <button data-mode="tactic">战术训练</button>
+    <button data-mode="mate">将死训练</button>
+    <button data-mode="lesson">开局课堂</button>
+    <button data-mode="rules">规则手册</button>
+    <span class="sp"></span>
+    <span class="cnt" id="modeCnt"></span>
+  </nav>
+
+  <div class="app">
+    <!-- ============ LEFT: board ============ -->
+    <section class="card boardcard">
+      <div class="strip" id="stripTop">
+        <div class="avatar b">♚</div>
+        <div class="who"><span id="topWho">电脑</span> <small id="topSub">执黑 · 后手</small></div>
+        <div class="tray" id="trayTop"></div>
+        <div class="adv" id="advTop"></div>
+      </div>
+
+      <div class="boardwrap">
+        <div class="board" id="board"></div>
+        <svg class="hintArrow" id="hintArrow" viewBox="0 0 8 8" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="promo" id="promo" style="display:none">
+          <div class="box">
+            <p>兵到底线，升变为什么？</p>
+            <div class="row" id="promoRow"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="strip" id="stripBot">
+        <div class="avatar w">♔</div>
+        <div class="who"><span id="botWho">你</span> <small id="botSub">执白 · 先手</small></div>
+        <div class="tray" id="trayBot"></div>
+        <div class="adv" id="advBot"></div>
+      </div>
+
+      <div class="ctl" id="ctlRow"></div>
+    </section>
+
+    <!-- ============ RIGHT: coach ============ -->
+    <section class="card panel">
+      <div class="panel-hd">
+        <h2><span class="dot"></span>教练解说</h2>
+        <div class="meta" id="panelMeta">第 1 回合</div>
+      </div>
+
+      <!-- 局面体检：常驻，不被解说流和棋谱挤走 -->
+      <div class="audit" id="audit"></div>
+
+      <div class="feed" id="feed"></div>
+
+      <div class="movesblock" id="movesBlock">
+        <div class="mh" id="movesHd">
+          <span id="movesTitle">棋谱</span><span id="movesCount">0 手</span>
+          <span class="caret">▾</span>
+        </div>
+        <div class="moves" id="movesWrap">
+          <table id="moveTable"><tbody id="moveBody"></tbody></table>
+          <details id="legendBox">
+            <summary>怎么看棋谱：Nc3 是什么意思？</summary>
+            <div class="legend">
+              <p>棋谱里每一格分两部分：<b>哪颗子</b> + <b>走到哪</b>。字母代表棋子，本站已经全部换成中文：</p>
+              <table>
+                <tr><td>马c3</td><td>马走到 c3（<span style="color:#9A9186">原来是 Nc3，N = Knight 马</span>）</td></tr>
+                <tr><td>象b5</td><td>象走到 b5（<span style="color:#9A9186">B = Bishop 象</span>）</td></tr>
+                <tr><td>车e1</td><td>车走到 e1（<span style="color:#9A9186">R = Rook 车</span>）</td></tr>
+                <tr><td>后d3</td><td>后走到 d3（<span style="color:#9A9186">Q = Queen 后</span>）</td></tr>
+                <tr><td>王g1</td><td>王走到 g1（<span style="color:#9A9186">K = King 王</span>）</td></tr>
+                <tr><td>e4</td><td>兵走到 e4 —— <b>兵不写名字</b>，只写落格（<span style="color:#9A9186">英文记法也一样</span>）</td></tr>
+                <tr><td>e×d5</td><td>e 列的兵吃掉 d5 上的子（×＝吃子）</td></tr>
+                <tr><td>马×e5</td><td>马吃掉 e5 上的子</td></tr>
+                <tr><td>将军 / 将死</td><td>出现在末尾：这步将了对方的军 / 直接杀死</td></tr>
+                <tr><td>短易位 / 长易位</td><td>王向王翼／后翼走两格，车同时翻过来</td></tr>
+                <tr><td>e8升后</td><td>兵走到底线升变成后（也可能升马、象、车）</td></tr>
+                <tr><td>马bd2</td><td>两匹马都能到 d2 时，用 b 标明是 b 列那匹（a–h 是列，1–8 是横排）</td></tr>
+              </table>
+            </div>
+          </details>
+          <details>
+            <summary>顺手记牢：开局三原则 · 中局四问 · 残局要点</summary>
+            <ul>
+              <li><b>开局三原则</b>　① 用兵占住中心（e4/d4/e5/d5）；② 先出马和象，别急着动后；③ 尽早王车易位，把王藏起来。</li>
+              <li><b>中局四问</b>　对方的子有没有保护？我有没有被夹击的子？哪条线（列/斜线）最薄弱？我能不能造一个双重威胁？</li>
+              <li><b>残局要点</b>　王要走到中心来当战斗单位；先推进没有对手兵阻挡的通路兵；兵越靠前越值钱。</li>
+              <li><b>子力价值</b>　兵 1 · 马 3 · 象 3 · 车 5 · 后 9。吃子前先算：换完谁赚。</li>
+            </ul>
+          </details>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script id="core">
+/* ================================================================
+   CHESS CORE — 规则引擎 + 搜索引擎
+   不依赖 DOM，可在 Node 中做 perft / 战术 / 自对弈回归校验
+   ================================================================ */
+const FILES = 'abcdefgh';
+const CN = {p:'兵', n:'马', b:'象', r:'车', q:'后', k:'王'};
+const GLYPH = {p:'♟', n:'♞', b:'♝', r:'♜', q:'♛', k:'♚'};
+const VAL  = {p:100, n:320, b:330, r:500, q:900, k:20000};
+const PT   = {p:1, n:3, b:3, r:5, q:9, k:0};
+const MATE = 100000;
+const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
+const inB = (r,c) => r>=0 && r<8 && c>=0 && c<8;
+const colorOf = p => p ? (p === p.toUpperCase() ? 'w' : 'b') : null;
+const typeOf  = p => p ? p.toLowerCase() : '';
+const other   = c => c === 'w' ? 'b' : 'w';
+const rowOf   = i => i >> 3;
+const colOf   = i => i & 7;
+const sqName  = i => FILES[i & 7] + (8 - (i >> 3));
+function nameToSq(s){ return (8 - parseInt(s[1],10)) * 8 + FILES.indexOf(s[0]); }
+
+const KN = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+const BD = [[-1,-1],[-1,1],[1,-1],[1,1]];
+const RD = [[-1,0],[1,0],[0,-1],[0,1]];
+const QD = BD.concat(RD);
+const CENTER = [27,28,35,36];
+
+/* ---------------- Zobrist 哈希 ---------------- */
+function makeRng(seed){
+  let a = seed >>> 0;
+  return function(){
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return (t ^ (t >>> 14)) >>> 0;
+  };
+}
+const _rand = makeRng(0x5EED2026);
+const T_IDX = {p:0, n:1, b:2, r:3, q:4, k:5};
+const ZP_LO = new Int32Array(12*64), ZP_HI = new Int32Array(12*64);
+for (let i=0;i<12*64;i++){ ZP_LO[i] = _rand()|0; ZP_HI[i] = _rand()|0; }
+const ZC_LO = new Int32Array(16), ZC_HI = new Int32Array(16);
+for (let i=0;i<16;i++){ ZC_LO[i] = _rand()|0; ZC_HI[i] = _rand()|0; }
+const ZT_LO = _rand()|0, ZT_HI = _rand()|0;
+
+const pieceKey = p => (T_IDX[typeOf(p)] + (colorOf(p) === 'w' ? 0 : 6)) * 64;
+const castBits = c => (c.K?1:0) | (c.Q?2:0) | (c.k?4:0) | (c.q?8:0);
+
+function parseFen(fen){
+  const parts = fen.trim().split(/\s+/);
+  const board = new Array(64).fill('');
+  let i = 0;
+  for (const ch of parts[0]){
+    if (ch === '/') continue;
+    if (ch >= '1' && ch <= '8') i += parseInt(ch,10);
+    else board[i++] = ch;
+  }
+  const c = parts[2] || '-';
+  const turn = parts[1] || 'w';
+  const cast = {K:c.includes('K'), Q:c.includes('Q'), k:c.includes('k'), q:c.includes('q')};
+  let lo = 0, hi = 0;
+  for (let s=0;s<64;s++){
+    const p = board[s]; if (!p) continue;
+    const k = pieceKey(p) + s;
+    lo ^= ZP_LO[k]; hi ^= ZP_HI[k];
+  }
+  const cb = castBits(cast);
+  lo ^= ZC_LO[cb]; hi ^= ZC_HI[cb];
+  if (turn === 'b'){ lo ^= ZT_LO; hi ^= ZT_HI; }
+  return {
+    board, turn, cast,
+    ep: (!parts[3] || parts[3] === '-') ? -1 : nameToSq(parts[3]),
+    half: parseInt(parts[4] || '0',10),
+    full: parseInt(parts[5] || '1',10),
+    lo, hi
+  };
+}
+
+function findKing(board, color){
+  const k = color === 'w' ? 'K' : 'k';
+  for (let i=0;i<64;i++) if (board[i] === k) return i;
+  return -1;
+}
+
+function isAttacked(board, sq, by){
+  if (sq < 0) return false;
+  const r = rowOf(sq), c = colOf(sq);
+  const pd = by === 'w' ? 1 : -1;            // 白兵在下方，向上攻击
+  for (const dc of [-1,1]){
+    const rr = r + pd, cc = c + dc;
+    if (inB(rr,cc)){
+      const p = board[rr*8+cc];
+      if (p && colorOf(p) === by && typeOf(p) === 'p') return true;
+    }
+  }
+  for (const d of KN){
+    const rr = r+d[0], cc = c+d[1];
+    if (inB(rr,cc)){
+      const p = board[rr*8+cc];
+      if (p && colorOf(p) === by && typeOf(p) === 'n') return true;
+    }
+  }
+  for (const d of QD){
+    const rr = r+d[0], cc = c+d[1];
+    if (inB(rr,cc)){
+      const p = board[rr*8+cc];
+      if (p && colorOf(p) === by && typeOf(p) === 'k') return true;
+    }
+  }
+  for (const d of RD){
+    let rr = r+d[0], cc = c+d[1];
+    while (inB(rr,cc)){
+      const p = board[rr*8+cc];
+      if (p){ if (colorOf(p) === by && (typeOf(p) === 'r' || typeOf(p) === 'q')) return true; break; }
+      rr += d[0]; cc += d[1];
+    }
+  }
+  for (const d of BD){
+    let rr = r+d[0], cc = c+d[1];
+    while (inB(rr,cc)){
+      const p = board[rr*8+cc];
+      if (p){ if (colorOf(p) === by && (typeOf(p) === 'b' || typeOf(p) === 'q')) return true; break; }
+      rr += d[0]; cc += d[1];
+    }
+  }
+  return false;
+}
+
+function inCheck(board, color){
+  const k = findKing(board, color);
+  return k < 0 ? false : isAttacked(board, k, other(color));
+}
+
+/* 谁在攻击/保护这个格子。
+   注意：不能用「能走到这一格」来判断保护——格子被自己人占着时，
+   自己人永远不会「走」到自己人身上。必须直接扫描攻击关系。 */
+function attacksFrom(board, sq, by){
+  const out = [];
+  if (sq < 0 || sq > 63) return out;
+  const r = rowOf(sq), c = colOf(sq);
+  const pd = by === 'w' ? 1 : -1;
+  for (const dc of [-1,1]){
+    const rr = r + pd, cc = c + dc;
+    if (inB(rr,cc)){
+      const p = board[rr*8+cc];
+      if (p && colorOf(p) === by && typeOf(p) === 'p') out.push({from: rr*8+cc, piece: p});
+    }
+  }
+  for (const d of KN){
+    const rr = r+d[0], cc = c+d[1];
+    if (inB(rr,cc)){
+      const p = board[rr*8+cc];
+      if (p && colorOf(p) === by && typeOf(p) === 'n') out.push({from: rr*8+cc, piece: p});
+    }
+  }
+  for (const d of QD){
+    const rr = r+d[0], cc = c+d[1];
+    if (inB(rr,cc)){
+      const p = board[rr*8+cc];
+      if (p && colorOf(p) === by && typeOf(p) === 'k') out.push({from: rr*8+cc, piece: p});
+    }
+  }
+  for (const d of RD){
+    let rr = r+d[0], cc = c+d[1];
+    while (inB(rr,cc)){
+      const p = board[rr*8+cc];
+      if (p){ if (colorOf(p) === by && (typeOf(p) === 'r' || typeOf(p) === 'q')) out.push({from: rr*8+cc, piece: p}); break; }
+      rr += d[0]; cc += d[1];
+    }
+  }
+  for (const d of BD){
+    let rr = r+d[0], cc = c+d[1];
+    while (inB(rr,cc)){
+      const p = board[rr*8+cc];
+      if (p){ if (colorOf(p) === by && (typeOf(p) === 'b' || typeOf(p) === 'q')) out.push({from: rr*8+cc, piece: p}); break; }
+      rr += d[0]; cc += d[1];
+    }
+  }
+  return out.sort((a,b) => VAL[typeOf(a.piece)] - VAL[typeOf(b.piece)]);
+}
+
+/* 生成伪合法着法 */
+function genMoves(st, color, capsOnly){
+  const b = st.board, moves = [];
+  const push = m => { if (!capsOnly || m.captured || m.promo) moves.push(m); };
+  for (let i=0;i<64;i++){
+    const p = b[i];
+    if (!p || colorOf(p) !== color) continue;
+    const t = typeOf(p), r = rowOf(i), c = colOf(i);
+
+    if (t === 'p'){
+      const dir = color === 'w' ? -1 : 1;
+      const startRow = color === 'w' ? 6 : 1;
+      const promoRow = color === 'w' ? 0 : 7;
+      const one = r + dir;
+      if (inB(one,c) && !b[one*8+c]){
+        if (one === promoRow){
+          for (const q of ['q','r','b','n']) moves.push({from:i, to:one*8+c, piece:p, captured:'', promo:q});
+        } else {
+          push({from:i, to:one*8+c, piece:p, captured:''});
+          const two = r + 2*dir;
+          if (r === startRow && !b[two*8+c]) push({from:i, to:two*8+c, piece:p, captured:'', double:true});
+        }
+      }
+      for (const dc of [-1,1]){
+        const cc = c + dc;
+        if (!inB(one,cc)) continue;
+        const j = one*8 + cc, q = b[j];
+        if (q && colorOf(q) !== color){
+          if (one === promoRow){
+            for (const pr of ['q','r','b','n']) moves.push({from:i, to:j, piece:p, captured:q, promo:pr});
+          } else push({from:i, to:j, piece:p, captured:q});
+        } else if (!q && j === st.ep){
+          // 吃过路兵：只有站在第 5 横排的白兵（第 4 横排的黑兵）才可能吃，
+          // 缺这个横排校验时，给「非走子方」做威胁分析会凭空生成 ep 吃子
+          if (r === (color === 'w' ? 3 : 4))
+            push({from:i, to:j, piece:p, captured: color === 'w' ? 'p' : 'P', ep:true});
+        }
+      }
+      continue;
+    }
+
+    if (t === 'n' || t === 'k'){
+      const dirs = t === 'n' ? KN : QD;
+      for (const d of dirs){
+        const rr = r+d[0], cc = c+d[1];
+        if (!inB(rr,cc)) continue;
+        const j = rr*8+cc, q = b[j];
+        if (q && colorOf(q) === color) continue;
+        push({from:i, to:j, piece:p, captured:q || ''});
+      }
+      if (t === 'k'){
+        const home = color === 'w' ? 60 : 4;
+        if (i === home && !capsOnly && !inCheck(b, color)){
+          const opp = other(color);
+          const kOK = color === 'w' ? st.cast.K : st.cast.k;
+          const qOK = color === 'w' ? st.cast.Q : st.cast.q;
+          if (kOK && !b[home+1] && !b[home+2] && !isAttacked(b,home+1,opp) && !isAttacked(b,home+2,opp))
+            moves.push({from:i, to:home+2, piece:p, captured:'', castle:'K'});
+          if (qOK && !b[home-1] && !b[home-2] && !b[home-3] && !isAttacked(b,home-1,opp) && !isAttacked(b,home-2,opp))
+            moves.push({from:i, to:home-2, piece:p, captured:'', castle:'Q'});
+        }
+      }
+      continue;
+    }
+
+    const dirs = t === 'b' ? BD : (t === 'r' ? RD : QD);
+    for (const d of dirs){
+      let rr = r+d[0], cc = c+d[1];
+      while (inB(rr,cc)){
+        const j = rr*8+cc, q = b[j];
+        if (q){
+          if (colorOf(q) !== color) push({from:i, to:j, piece:p, captured:q});
+          break;
+        }
+        push({from:i, to:j, piece:p, captured:''});
+        rr += d[0]; cc += d[1];
+      }
+    }
+  }
+  return moves;
+}
+
+/* 执行着法，返回新状态（不可变，同时增量维护 Zobrist） */
+function applyMove(st, m){
+  const b = st.board.slice();
+  const color = colorOf(m.piece);
+  let lo = st.lo, hi = st.hi;
+
+  let k = pieceKey(m.piece) + m.from;
+  lo ^= ZP_LO[k]; hi ^= ZP_HI[k];
+  b[m.from] = '';
+
+  if (m.captured){
+    const capSq = m.ep ? (m.to + (color === 'w' ? 8 : -8)) : m.to;
+    const cp = b[capSq];
+    k = pieceKey(cp) + capSq;
+    lo ^= ZP_LO[k]; hi ^= ZP_HI[k];
+    b[capSq] = '';
+  }
+
+  const placed = m.promo ? (color === 'w' ? m.promo.toUpperCase() : m.promo) : m.piece;
+  k = pieceKey(placed) + m.to;
+  lo ^= ZP_LO[k]; hi ^= ZP_HI[k];
+  b[m.to] = placed;
+
+  if (m.castle){
+    const rf = m.castle === 'K' ? (color==='w'?63:7) : (color==='w'?56:0);
+    const rt = m.castle === 'K' ? (color==='w'?61:5) : (color==='w'?59:3);
+    const rp = color === 'w' ? 'R' : 'r';
+    b[rt] = rp; b[rf] = '';
+    let kk = pieceKey(rp) + rf; lo ^= ZP_LO[kk]; hi ^= ZP_HI[kk];
+    kk = pieceKey(rp) + rt; lo ^= ZP_LO[kk]; hi ^= ZP_HI[kk];
+  }
+
+  const cast = {K:st.cast.K, Q:st.cast.Q, k:st.cast.k, q:st.cast.q};
+  if (typeOf(m.piece) === 'k'){ if (color==='w'){ cast.K = cast.Q = false; } else { cast.k = cast.q = false; } }
+  if (m.from === 63 || m.to === 63) cast.K = false;
+  if (m.from === 56 || m.to === 56) cast.Q = false;
+  if (m.from === 7  || m.to === 7 ) cast.k = false;
+  if (m.from === 0  || m.to === 0 ) cast.q = false;
+
+  const ob = castBits(st.cast), nb = castBits(cast);
+  if (ob !== nb){ lo ^= ZC_LO[ob] ^ ZC_LO[nb]; hi ^= ZC_HI[ob] ^ ZC_HI[nb]; }
+  lo ^= ZT_LO; hi ^= ZT_HI;
+
+  return {
+    board: b,
+    turn: other(color),
+    cast,
+    ep: m.double ? (m.from + m.to) / 2 : -1,
+    half: (m.captured || typeOf(m.piece) === 'p') ? 0 : st.half + 1,
+    full: st.full + (color === 'b' ? 1 : 0),
+    lo, hi
+  };
+}
+
+function nullState(st){
+  return {
+    board: st.board, turn: other(st.turn), cast: st.cast, ep: -1,
+    half: st.half + 1, full: st.full, lo: st.lo ^ ZT_LO, hi: st.hi ^ ZT_HI
+  };
+}
+
+function legalMoves(st, color){
+  const res = [];
+  for (const m of genMoves(st, color, false)){
+    const ns = applyMove(st, m);
+    if (!isAttacked(ns.board, findKing(ns.board, color), other(color))) res.push(m);
+  }
+  return res;
+}
+
+function attackersTo(st, sq, by){
+  return genMoves(st, by, false).filter(m => m.to === sq);
+}
+
+/* 标准记谱法 */
+function toSan(st, m){
+  if (m.castle) return m.castle === 'K' ? 'O-O' : 'O-O-O';
+  const t = typeOf(m.piece), color = colorOf(m.piece);
+  let s = '';
+  if (t === 'p'){
+    if (m.captured) s += FILES[colOf(m.from)] + 'x';
+    s += sqName(m.to);
+    if (m.promo) s += '=' + m.promo.toUpperCase();
+  } else {
+    s += t.toUpperCase();
+    const rivals = legalMoves(st, color).filter(x =>
+      x.to === m.to && x.from !== m.from && typeOf(x.piece) === t);
+    if (rivals.length){
+      const sameFile = rivals.some(x => colOf(x.from) === colOf(m.from));
+      const sameRank = rivals.some(x => rowOf(x.from) === rowOf(m.from));
+      if (!sameFile) s += FILES[colOf(m.from)];
+      else if (!sameRank) s += String(8 - rowOf(m.from));
+      else s += sqName(m.from);
+    }
+    if (m.captured) s += 'x';
+    s += sqName(m.to);
+  }
+  const ns = applyMove(st, m);
+  const opp = other(color);
+  if (inCheck(ns.board, opp)) s += legalMoves(ns, opp).length ? '+' : '#';
+  return s;
+}
+
+/* 中文记谱：把「Nc3」写成「马c3」——字母代表棋子，对新手不友好，这里全部换中文。
+   规则：马象车后王 + 落格；兵只写落格；吃子写 ×；将军/将死写在后面；
+        易位写「短易位 / 长易位」；升变写「e8升后」；两个同种子都能到同一格时才补出来处。 */
+function cnSan(st, m){
+  if (m.castle) return m.castle === 'K' ? '短易位' : '长易位';
+  const t = typeOf(m.piece), color = colorOf(m.piece);
+  let s = '';
+  if (t === 'p'){
+    if (m.captured) s += FILES[colOf(m.from)] + '×';
+    s += sqName(m.to);
+    if (m.promo) s += '升' + CN[m.promo];
+  } else {
+    s += CN[t];
+    const rivals = legalMoves(st, color).filter(x =>
+      x.to === m.to && x.from !== m.from && typeOf(x.piece) === t);
+    if (rivals.length){
+      const sameFile = rivals.some(x => colOf(x.from) === colOf(m.from));
+      const sameRank = rivals.some(x => rowOf(x.from) === rowOf(m.from));
+      if (!sameFile) s += FILES[colOf(m.from)];
+      else if (!sameRank) s += String(8 - rowOf(m.from));
+      else s += sqName(m.from);
+    }
+    if (m.captured) s += '×';
+    s += sqName(m.to);
+  }
+  const ns = applyMove(st, m);
+  const opp = other(color);
+  if (inCheck(ns.board, opp)) s += legalMoves(ns, opp).length ? '将军' : '将死';
+  return s;
+}
+
+/* 用 SAN 反查着法（题库 / 课程用中文记谱存着法，但内部按 SAN 校验） */
+function moveFromSan(st, san){
+  for (const m of legalMoves(st, st.turn)) if (toSan(st, m) === san) return m;
+  return null;
+}
+
+/* ================================================================
+   评估函数：子力 + 位置表 + 兵形 + 通路兵 + 象对 + 车开放线 + 王前兵
+   ================================================================ */
+const PST = {
+  p:[ 0,0,0,0,0,0,0,0, 50,50,50,50,50,50,50,50, 10,10,20,30,30,20,10,10,
+      5,5,10,25,25,10,5,5, 0,0,0,20,20,0,0,0, 5,-5,-10,0,0,-10,-5,5,
+      5,10,10,-20,-20,10,10,5, 0,0,0,0,0,0,0,0],
+  n:[-50,-40,-30,-30,-30,-30,-40,-50, -40,-20,0,0,0,0,-20,-40, -30,0,10,15,15,10,0,-30,
+     -30,5,15,20,20,15,5,-30, -30,0,15,20,20,15,0,-30, -30,5,10,15,15,10,5,-30,
+     -40,-20,0,5,5,0,-20,-40, -50,-40,-30,-30,-30,-30,-40,-50],
+  b:[-20,-10,-10,-10,-10,-10,-10,-20, -10,0,0,0,0,0,0,-10, -10,0,5,10,10,5,0,-10,
+     -10,5,5,10,10,5,5,-10, -10,0,10,10,10,10,0,-10, -10,10,10,10,10,10,10,-10,
+     -10,5,0,0,0,0,5,-10, -20,-10,-10,-10,-10,-10,-10,-20],
+  r:[ 0,0,0,0,0,0,0,0, 5,10,10,10,10,10,10,5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5,
+     -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, 0,0,0,5,5,0,0,0],
+  q:[-20,-10,-10,-5,-5,-10,-10,-20, -10,0,0,0,0,0,0,-10, -10,0,5,5,5,5,0,-10,
+     -5,0,5,5,5,5,0,-5, 0,0,5,5,5,5,0,-5, -10,5,5,5,5,5,0,-10,
+     -10,0,5,0,0,0,0,-10, -20,-10,-10,-5,-5,-10,-10,-20],
+  kM:[-30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30,
+      -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30,
+      -20,-30,-30,-40,-40,-30,-30,-20, -10,-20,-20,-20,-20,-20,-20,-10,
+      20,20,0,0,0,0,20,20, 20,30,10,0,0,10,30,20],
+  kE:[-50,-40,-30,-20,-20,-30,-40,-50, -30,-20,-10,0,0,-10,-20,-30,
+      -30,-10,20,30,30,20,-10,-30, -30,-10,30,40,40,30,-10,-30,
+      -30,-10,30,40,40,30,-10,-30, -30,-10,20,30,30,20,-10,-30,
+      -30,-30,0,0,0,0,-30,-30, -50,-30,-30,-30,-30,-30,-30,-50]
+};
+const PASSED = [0, 12, 26, 48, 80, 130];
+
+const _wf = new Int32Array(8), _bf = new Int32Array(8);
+const _bmin = new Int32Array(8), _wmax = new Int32Array(8);
+
+function evalWhite(st){
+  const b = st.board;
+  _wf.fill(0); _bf.fill(0); _bmin.fill(99); _wmax.fill(-1);
+  let npm = 0, wb = 0, bb = 0, wk = 60, bk = 4;
+  for (let i=0;i<64;i++){
+    const p = b[i]; if (!p) continue;
+    const t = typeOf(p), w = colorOf(p) === 'w';
+    if (t === 'k'){ if (w) wk = i; else bk = i; continue; }
+    if (t !== 'p') npm += VAL[t];
+    if (t === 'b'){ if (w) wb++; else bb++; }
+    if (t === 'p'){
+      const c = i & 7, r = i >> 3;
+      if (w){ _wf[c]++; if (r > _wmax[c]) _wmax[c] = r; }
+      else  { _bf[c]++; if (r < _bmin[c]) _bmin[c] = r; }
+    }
+  }
+  const endgame = npm < 1800;
+  let score = 0;
+
+  for (let i=0;i<64;i++){
+    const p = b[i]; if (!p) continue;
+    const t = typeOf(p), w = colorOf(p) === 'w';
+    const idx = w ? i : (i ^ 56);
+    const table = t === 'k' ? (endgame ? PST.kE : PST.kM) : PST[t];
+    score += w ? (VAL[t] + table[idx]) : -(VAL[t] + table[idx]);
+
+    if (t === 'p'){
+      const c = i & 7, r = i >> 3;
+      // 叠兵 / 孤兵
+      const doubled = (w ? _wf[c] : _bf[c]) - 1;
+      if (doubled > 0) score += w ? -13 * doubled : 13 * doubled;
+      const alone = w
+        ? ((c === 0 || _wf[c-1] === 0) && (c === 7 || _wf[c+1] === 0))
+        : ((c === 0 || _bf[c-1] === 0) && (c === 7 || _bf[c+1] === 0));
+      if (alone) score += w ? -16 : 16;
+      // 通路兵
+      const passed = w
+        ? ((c === 0 || _bmin[c-1] > r) && _bmin[c] > r && (c === 7 || _bmin[c+1] > r))
+        : ((c === 0 || _wmax[c-1] < r) && _wmax[c] < r && (c === 7 || _wmax[c+1] < r));
+      if (passed){
+        const adv = w ? (6 - r) : (r - 1);
+        const bonus = PASSED[Math.max(0, Math.min(5, adv))] * (endgame ? 1.6 : 1);
+        score += w ? bonus : -bonus;
+      }
+    } else if (t === 'r'){
+      const c = i & 7;
+      if ((w ? _wf[c] : _bf[c]) === 0){
+        const semi = (w ? _bf[c] : _wf[c]) === 0;
+        score += w ? (semi ? 22 : 11) : -(semi ? 22 : 11);
+      }
+    }
+  }
+
+  if (wb >= 2) score += 32;
+  if (bb >= 2) score -= 32;
+
+  // 王前兵盾（中局）
+  if (!endgame){
+    for (const [king, w] of [[wk, true], [bk, false]]){
+      if (king < 0) continue;
+      const kr = king >> 3, kc = king & 7;
+      if (w ? kr < 5 : kr > 2) continue;           // 王已经跑出去了，不再看兵盾
+      const dir = w ? -1 : 1;
+      let shield = 0;
+      for (let dc = -1; dc <= 1; dc++){
+        const c = kc + dc;
+        if (c < 0 || c > 7) continue;
+        const r1 = kr + dir;
+        if (inB(r1,c) && typeOf(b[r1*8+c]) === 'p' && colorOf(b[r1*8+c]) === (w?'w':'b')){ shield += 12; continue; }
+        const r2 = kr + 2*dir;
+        if (inB(r2,c) && typeOf(b[r2*8+c]) === 'p' && colorOf(b[r2*8+c]) === (w?'w':'b')){ shield += 5; continue; }
+        shield -= 14;
+      }
+      score += w ? shield : -shield;
+    }
+  }
+
+  score += st.turn === 'w' ? 10 : -10;             // 先手方略优
+  return score;
+}
+
+/* ================================================================
+   置换表 + 搜索
+   ================================================================ */
+const TT_BITS = 18, TT_SIZE = 1 << TT_BITS, TT_MASK = TT_SIZE - 1;
+const ttLo = new Int32Array(TT_SIZE), ttHi = new Int32Array(TT_SIZE);
+const ttDepth = new Int8Array(TT_SIZE), ttFlag = new Int8Array(TT_SIZE);
+const ttScore = new Int32Array(TT_SIZE), ttMove = new Int32Array(TT_SIZE);
+const KILLER = new Int32Array(256);
+const HIST = new Int32Array(64*64);
+const PVT = new Int32Array(64*64);
+const PVL = new Int32Array(64);
+
+function clearTT(){
+  ttLo.fill(0); ttHi.fill(0); ttDepth.fill(0); ttFlag.fill(0);
+  ttScore.fill(0); ttMove.fill(0); KILLER.fill(0); HIST.fill(0);
+}
+
+const encM = m => (m.from & 63) | ((m.to & 63) << 6) |
+  (((m.promo ? 'pnbrq'.indexOf(m.promo) + 1 : 0) & 7) << 12) |
+  ((m.castle === 'K' ? 1 : m.castle === 'Q' ? 2 : 0) << 15) |
+  (m.ep ? 1 << 17 : 0);
+
+let ABORT = false, ABORT_AT = 0, NODES = 0;
+function newSearch(timeMs){
+  ABORT = false; ABORT_AT = Date.now() + timeMs; NODES = 0;
+  for (let i=0;i<256;i++) KILLER[i] = 0;
+}
+function tick(){
+  if ((++NODES & 255) === 0 && Date.now() > ABORT_AT) ABORT = true;
+  return ABORT;
+}
+
+function orderMoves(list, ttCode, ply){
+  const k1 = KILLER[ply << 1], k2 = KILLER[(ply << 1) + 1];
+  for (let i=0;i<list.length;i++){
+    const m = list[i];
+    let s;
+    if (m.captured) s = 1e6 + VAL[typeOf(m.captured)] * 16 - VAL[typeOf(m.piece)];
+    else if (m.promo) s = 9e5 + VAL[m.promo];
+    else s = HIST[(m.from << 6) + m.to];
+    const code = encM(m);
+    if (code === ttCode) s = 1e8;
+    else if (code === k1) s = 9e7;
+    else if (code === k2) s = 8.9e7;
+    m._s = s;
+  }
+  list.sort((a,b) => b._s - a._s);
+  return list;
+}
+
+function quiesce(st, alpha, beta, ply){
+  if (tick()) return 0;
+  const me = st.turn, opp = other(me), sgn = me === 'w' ? 1 : -1;
+  const inChk = inCheck(st.board, me);
+  let best;
+  if (!inChk){
+    const stand = evalWhite(st) * sgn;
+    if (stand >= beta) return stand;
+    if (stand > alpha) alpha = stand;
+    best = stand;
+  } else best = -MATE + ply;
+  if (ply > 24) return isFinite(best) ? best : evalWhite(st) * sgn;
+
+  const moves = orderMoves(genMoves(st, me, !inChk), 0, ply);
+  const myKing = findKing(st.board, me);
+  let any = false;
+  for (const m of moves){
+    // 静态剪枝：就算白吃这一子也追不回 alpha，直接不看
+    if (!inChk && m.captured && !m.promo && best + VAL[typeOf(m.captured)] + 170 <= alpha) continue;
+    const child = applyMove(st, m);
+    const ksq = m.from === myKing ? m.to : myKing;
+    if (isAttacked(child.board, ksq, opp)) continue;
+    any = true;
+    const v = -quiesce(child, -beta, -alpha, ply + 1);
+    if (ABORT) return 0;
+    if (v > best) best = v;
+    if (best > alpha) alpha = best;
+    if (alpha >= beta) break;
+  }
+  if (inChk && !any) return -(MATE - ply);
+  return best;
+}
+
+function negamax(st, depth, alpha, beta, ply){
+  if (tick()) return 0;
+  PVL[ply] = 0;
+  const alphaOrig = alpha;
+  const me = st.turn, opp = other(me);
+  const key = st.lo, keyHi = st.hi;
+  const idx = key & TT_MASK;
+  let hint = 0;
+  if (ttHi[idx] === keyHi && ttLo[idx] === key){
+    hint = ttMove[idx];
+    if (ttDepth[idx] >= depth && ply > 0){
+      let sc = ttScore[idx];
+      if (sc > MATE - 2000) sc -= ply;
+      else if (sc < -MATE + 2000) sc += ply;
+      const f = ttFlag[idx];
+      if (f === 1) return sc;
+      if (f === 2 && sc >= beta) return sc;
+      if (f === 3 && sc <= alpha) return sc;
+    }
+  }
+
+  if (depth <= 0) return quiesce(st, alpha, beta, ply);
+
+  const inChk = inCheck(st.board, me);
+
+  if (!inChk && ply > 0 && depth >= 3 && beta < MATE - 2000 && hasHeavy(st, me)){
+    const R = depth > 6 ? 3 : 2;
+    const v = -negamax(nullState(st), depth - 1 - R, -beta, -beta + 1, ply + 1);
+    if (ABORT) return 0;
+    if (v >= beta) return v;
+  }
+
+  // 伪合法着法 + 惰性合法性校验：比「先把所有着法都试一遍」快得多
+  const moves = orderMoves(genMoves(st, me, false), hint, ply);
+  const myKing = findKing(st.board, me);
+  let best = -Infinity, bestCode = 0, i = 0, legal = 0;
+
+  for (const m of moves){
+    const child = applyMove(st, m);
+    const ksq = m.from === myKing ? m.to : myKing;
+    if (isAttacked(child.board, ksq, opp)) continue;
+    legal++;
+    const quiet = !m.captured && !m.promo;
+    let v;
+    if (i === 0){
+      v = -negamax(child, depth - 1, -beta, -alpha, ply + 1);
+    } else {
+      let red = 0;
+      if (quiet && depth >= 3 && i >= 4 && !inChk) red = (i >= 14 && depth >= 5) ? 2 : 1;
+      v = -negamax(child, depth - 1 - red, -alpha - 1, -alpha, ply + 1);
+      if (ABORT) return 0;
+      if (v > alpha && red) v = -negamax(child, depth - 1, -alpha - 1, -alpha, ply + 1);
+      if (v > alpha && v < beta) v = -negamax(child, depth - 1, -beta, -alpha, ply + 1);
+    }
+    if (ABORT) return 0;
+    if (v > best){
+      best = v; bestCode = encM(m);
+      if (quiet){
+        if (KILLER[ply << 1] !== bestCode){ KILLER[(ply << 1) + 1] = KILLER[ply << 1]; KILLER[ply << 1] = bestCode; }
+        HIST[(m.from << 6) + m.to] += depth * depth;
+      }
+      PVT[ply * 64] = bestCode;
+      const cl = PVL[ply + 1];
+      for (let j=0;j<cl;j++) PVT[ply * 64 + 1 + j] = PVT[(ply + 1) * 64 + j];
+      PVL[ply] = cl + 1;
+    }
+    if (best > alpha) alpha = best;
+    i++;
+    if (alpha >= beta) break;
+  }
+
+  if (!legal) return inChk ? -(MATE - ply) : 0;
+
+  if (!ABORT){
+    ttLo[idx] = key; ttHi[idx] = keyHi; ttMove[idx] = bestCode;
+    ttDepth[idx] = depth > 127 ? 127 : depth;
+    ttScore[idx] = best;
+    ttFlag[idx] = best <= alphaOrig ? 3 : (best >= beta ? 2 : 1);
+  }
+  return best;
+}
+
+
+function hasHeavy(st, color){
+  const want = color === 'w' ? ['N','B','R','Q'] : ['n','b','r','q'];
+  for (let i=0;i<64;i++){ const p = st.board[i]; if (p && want.indexOf(p) >= 0) return true; }
+  return false;
+}
+
+function searchRoot(st, depth, hint){
+  const list = legalMoves(st, st.turn);
+  if (!list.length) return {best:null, score:-MATE, ordered:[], aborted:false, pv:[]};
+  orderMoves(list, hint, 0);
+  const results = [];
+  let best = null, bestScore = -Infinity, pv = [];
+  for (let i=0;i<list.length;i++){
+    const m = list[i];
+    PVL[1] = 0;
+    const v = -negamax(applyMove(st, m), depth - 1, -Infinity, i === 0 ? Infinity : -bestScore, 1);
+    if (ABORT) break;
+    results.push({move: m, score: v, exact: i === 0 || v > bestScore});
+    if (v > bestScore){
+      bestScore = v; best = m;
+      pv = [encM(m)];
+      for (let j=0;j<PVL[1];j++) pv.push(PVT[64 + j]);
+    }
+  }
+  results.sort((a,b) => b.score - a.score);
+  return {best, score: bestScore, ordered: results, aborted: ABORT, pv};
+}
+
+/* 迭代加深：在时间预算内逐层加深，返回完整分析结果 */
+function analyze(st, opts){
+  opts = opts || {};
+  const maxDepth = opts.maxDepth || 6;
+  const timeMs = opts.timeMs || 300;
+  newSearch(timeMs);
+  const t0 = Date.now();
+  let out = {move:null, score:0, ordered:[], depth:0, pv:[], nodes:0, ms:0};
+  if (!legalMoves(st, st.turn).length) return out;
+  let hint = 0;
+  for (let d=1; d<=maxDepth; d++){
+    const r = searchRoot(st, d, hint);
+    if (r.best && !(r.aborted && d > 1)){
+      out.move = r.best; out.score = r.score; out.ordered = r.ordered;
+      out.depth = d; out.pv = r.pv; hint = encM(r.best);
+    }
+    if (r.aborted) break;
+    if (Math.abs(r.score) > MATE - 2000) break;
+    if (ABORT_AT - Date.now() < timeMs * 0.45) break;
+  }
+  if (!out.move && out.ordered.length) out.move = out.ordered[0].move;
+  out.nodes = NODES; out.ms = Date.now() - t0;
+  return out;
+}
+
+/* 三档强度：同一套搜索，差别只在给多少时间、允许多大程度的「不精确」。
+   gamble = 有多少概率不选首选，而在「几乎一样好」的几步里换一个；
+   slack  = 允许差多少分（1 分 = 百分之一兵）还算「一样好」；
+   top    = 拿前几名来比较。注意 top 必须是 2 以上，否则候选池里只有一步，永远换不了。 */
+const LEVELS = {
+  1: {label:'入门', maxDepth: 2,  timeMs: 140,  slack: 70, gamble: 0.5,  top: 3},
+  2: {label:'进阶', maxDepth: 6,  timeMs: 340,  slack: 22, gamble: 0.30, top: 3},
+  3: {label:'较强', maxDepth: 24, timeMs: 1100, slack: 12, gamble: 0.15, top: 3}
+};
+
+function engineChoose(st, level){
+  const cfg = LEVELS[level] || LEVELS[2];
+  const r = analyze(st, {maxDepth: cfg.maxDepth, timeMs: cfg.timeMs});
+  if (!r.move) return null;
+  r.picked = false;
+  // 先掷骰子，再决定要不要多花时间 —— 掷不中就一步都不多算
+  const roll = cfg.gamble > 0 && r.ordered.length > 1 && Math.random() < cfg.gamble;
+  if (roll){
+    // 没被搜进 PV 的着法只有上界，不能直接拿来比大小——
+    // 把前几名用全窗口精确重算一遍，再在里面挑
+    const cand = [];
+    for (const x of r.ordered.slice(0, cfg.top)){
+      const v = scoreMove(st, x.move, Math.min(5, Math.max(2, r.depth)), 220);
+      if (v !== null) cand.push({move: x.move, score: v});
+    }
+    cand.sort((a,b) => b.score - a.score);
+    if (cand.length){
+      const top = cand[0].score;
+      const pool = cand.filter(x => x.score >= top - cfg.slack);
+      if (pool.length > 1){
+        const take = pool[Math.floor(Math.random() * pool.length)];
+        if (encM(take.move) !== encM(r.ordered[0].move)){
+          r.picked = true;
+          r.score = take.score;      // 换过的那一步分值要跟着改，解说里才不撒谎
+        }
+        r.move = take.move;
+      }
+    }
+  }
+  return r;
+}
+
+/* 精确算一步棋的价值（给玩家的走法打分用）。
+   根节点的 alpha-beta 只会给「没走的那步」一个上界，没法回答
+   「你这步到底亏了多少」，所以这里对这棵树开全窗口重新算一次。 */
+function scoreMove(st, m, depth, timeMs){
+  newSearch(timeMs || 420);
+  const d = Math.max(1, depth || 4);
+  const v = -negamax(applyMove(st, m), d - 1, -Infinity, Infinity, 1);
+  return ABORT ? null : v;
+}
+
+function perft(st, d){
+  if (d === 0) return 1;
+  let n = 0;
+  for (const m of legalMoves(st, st.turn)) n += perft(applyMove(st, m), d-1);
+  return n;
+}
+
+/* ---------- 开局库：让前几步像人类一样自然，而且每步都有教学点 ---------- */
+const BOOK = {
+  '': {e4:'中心兵直接抢占 e4，同时打开白后和王翼象的斜线——最经典的第一步。',
+       d4:'d4 从另一侧占中心，后手通常能走得更稳。',
+       Nf3:'先出马控制 d4/e5，灵活、不暴露兵结构。',
+       c4:'英国式开局，从侧翼控制 d5，把中心交给后面两步再建立。'},
+  'e4': {e5:'对称地顶住中心，顺手打开黑后和王翼象的斜线。',
+         c5:'西西里防御：不跟着对称，先从侧翼攻击你的 d4 中心。',
+         e6:'法兰西防御：先巩固 e5，再走 d5 反击中心。',
+         c6:'卡罗康防御：准备用 d5 建立一个牢固的中心。'},
+  'e4 e5': {Nf3:'出马同时攻击 e5 兵——开局先出马象，别急着动后。'},
+  'e4 e5 Nf3': {Nc6:'保护 e5 兵，顺便把马放到中心，最标准的应法。'},
+  'e4 e5 Nf3 Nc6': {Bb5:'西班牙开局：用象牵制保护 e5 的马，给黑方制造结构压力。',
+                    Bc4:'意大利开局：象指向 f7 这个最脆弱的格子，接着 c3+d4 抢中心。'},
+  'e4 e5 Nf3 Nc6 Bb5': {a6:'莫拉变例：先问一句「象要不要换」，逼你当场决定。'},
+  'd4': {d5:'对称顶住中心，最直接的应法。',
+         Nf6:'印度防御体系：先用马控制 e4，再决定兵的结构。'},
+  'd4 d5': {c4:'后翼弃兵：用 c4 兵挑战黑方的 d5 中心兵。'},
+  'e4 c5': {Nf3:'先出马准备 d4，避免过早把兵结构暴露给对方的侧翼攻击。'},
+  'e4 e5 Nf3 Nc6 Bc4': {Bc5:'对称出象，双方都把象指向对方最脆弱的那一格。'}
+};
+
+if (typeof module !== 'undefined' && module.exports){
+  module.exports = {parseFen, legalMoves, applyMove, inCheck, perft, START_FEN, toSan, analyze, evalWhite, encM, genMoves, attackersTo, attacksFrom, scoreMove, LEVELS, nullState, cnSan, moveFromSan, findKing};
+}
+</script>
+
+<script id="ui">
+/* ============================ UI ============================ */
+const $ = id => document.getElementById(id);
+const boardEl = $('board'), feedEl = $('feed'), promoEl = $('promo'), promoRow = $('promoRow');
+
+const HUMAN_AN = {maxDepth: 6, timeMs: 340};   // 给玩家这步打分用的固定预算
+const HINT_AN  = {maxDepth: 10, timeMs: 900};  // 提示按钮给得更足
+
+let S = {
+  st: parseFen(START_FEN),
+  human: 'w',
+  seq: [], history: [], moves: [],
+  pos: {},                      // 局面重复计数（三次重复判和）
+  last: null,
+  selected: -1, targets: [], hint: null,
+  busy: false, over: false,
+  analysis: null,               // 玩家局面的分析：评分 / 提示 / 体检都从这里来
+  captured: {w: [], b: []}
+};
+
+/* ================================================================
+   训练题库
+   全部经 .puzzle-test.js 校验：走法合法、将死题在对方任何应法下都能按期将死、
+   战术题在对方任何应法下都确实赚到子。
+   sol = 标准答案线（双方交替，偶数位是你该走的）；drill = 残局自由演练
+   ================================================================ */
+const TACTICS = [
+  { t:'白吃悬子', fen:'rnb1kbnr/pppp1ppp/8/4p3/4P2q/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 1',
+    sol:['Nxh4'],
+    goal:'黑方把后走到 <em>h4</em>，但那里<b>没有任何子保护它</b>。白方走，一步拿下这个后。',
+    tip:'先给对方每个子问一句：它由谁保护？h4 上那颗子周围，有黑子照看着吗？',
+    why:'马 f3 直接跳到 h4 吃掉黑后，白赚 9 分。黑方一子都不能吃回来——这就是「悬子」，也是最常见的送子方式。' },
+
+  { t:'马分叉（王 + 车）', fen:'r3k2r/pp2pppp/5n2/3N4/8/8/PPP2PPP/R3K2R w KQkq - 0 1',
+    sol:['Nc7+'],
+    goal:'白方走，用一步让同一颗子同时攻击<b>两个目标</b>。',
+    tip:'马走「日」字，它能同时踩到的两格往往离得很远。看看 e8 的王和 a8 的车，有没有一格能同时管住它们。',
+    why:'马从 d5 跳到 c7，同时踩住两样东西：e8 的王（将军）和 a8 的车。王必须先躲，白方回头吃车。黑方另一只车会把马吃掉，但账很清楚：用一个马（3 分）换一个车（5 分），净赚 2 分。<br>这招叫「分叉」——一颗子同时攻击两个目标，对方一次只能救一个。' },
+
+  { t:'车串击（王 + 后）', fen:'q7/5ppp/8/k7/8/8/1KPP1PPP/7R w - - 0 1',
+    sol:['Ra1+'],
+    goal:'黑王和黑后都排在 a 列上。白方走，一步让它们只能一个个挨打。',
+    tip:'王在前、后在最后，是串击最理想的靶子。找一条能让车带着将军插进去的线。',
+    why:'车从 h1 横着走到 a1 将军。a 列上王在前、后在最后——王必须先躲开，白车顺着这条线就把后吃掉了（+9）。<br>这叫「串击」：不像分叉是同时打两个，而是从前面那个逼起，打完前面吃后面。' },
+
+  { t:'后叉（将军 + 吃车）', fen:'r1n1k3/5ppp/8/8/8/5Q2/5PPP/6K1 w - - 0 1',
+    sol:['Qc6+'],
+    goal:'白方走，一步既将军又威胁车。',
+    tip:'白后在 f3。找一找哪些格子能同时「看到」e8 的王和 a8 的车——顺着 f3 到 e8 的斜线往后想。',
+    why:'后走到 c6 将军：它沿 c6-d7-e8 攻击黑王，同时顺 c6-b7-a8 盯住黑车。两样只能救一样——王必须动，白方随后吃车（+5）。<br>后是最好用的分叉工具，因为它同时管着横、竖、斜八个方向。' },
+
+  { t:'升变吃子', fen:'r6k/1P5p/8/8/8/8/5PPP/6K1 w - - 0 1',
+    sol:['bxa8=Q+'],
+    goal:'白方走，把一个兵送到底线——注意底线上正好有东西可以吃。',
+    tip:'兵到了最后一排必须升变。b7 的兵斜着能吃哪一格？那一格上站着什么？',
+    why:'b7 的兵斜吃 a8 的黑车，同时升变为后：吃了车（+5）又得到后（+9），还带将军。<br>升变时通常选后；只有在「升马才能立刻将军赢棋」这类特殊情况下才选马。' },
+
+  { t:'牵制住的子不能动，用兵吃它', fen:'r1bqk2r/pp3ppp/2n5/1B1Pp3/4P3/8/PP3PPP/R2QKBN1 w KQkq - 0 1',
+    sol:['dxc6'],
+    goal:'白方走，找出一个「对方明明看着、却动不了」的子。',
+    tip:'c6 的黑马被白象 b5 牵制在 e8 的王前面：它一走开，王就暴露在象的斜线上，所以它不能动。用什么最便宜的子去吃它？',
+    why:'d5 的兵往前走一格吃掉 c6 的马。黑方只能用 b7 的兵吃回来，账是：一个兵（1 分）换一个马（3 分），净赚 2 分。<br>被<b>绝对牵制</b>的子动不了，就等于站在那里让你吃。' },
+
+  { t:'被保护的子也能吃（后比车值钱）', fen:'6k1/5ppp/5n2/3q4/8/8/PP3PPP/1N1R2K1 w - - 0 1',
+    sol:['Rxd5'],
+    goal:'黑后有人保护。白方走，算一笔账，看看这步到底划不划算。',
+    tip:'黑后 d5 由 f6 的马看着。如果你用车去吃它，对方吃回来之后，你手里剩下什么、丢了什么？',
+    why:'车吃掉 d5 的黑后（9 分），黑马吃回来（5 分）。后换车永远赚：净赚 4 分。<br>新手最常见的毛病是「它有保护我就不敢吃」——先算清换完谁赚，别只看有没有保护。' },
+
+  { t:'闪将（让开一条线，车来将军）', fen:'2n1k2r/pppp2pp/8/4N3/2B5/8/PP3PPP/4R1K1 w - - 0 1',
+    sol:['Nf7+'],
+    goal:'白方走，用一步同时做两件事：让开一条线、还顺手攻击一个目标。',
+    tip:'e1 的白车和 e8 的黑王之间只隔着一个白马。这个马跳开之后会发生什么？它跳到哪一格还能同时踩住别的子？',
+    why:'马从 e5 跳到 f7，退开之后 e1 的车立刻顺 e 列将军——这叫「闪将」。同时马在 f7 上踩住了 h8 的车。黑王必须先应将军，白方回头吃车（+5）。<br>f7 有 c4 的象保护，黑王不敢吃马。' }
+];
+
+const MATES = [
+  { t:'一步杀（学者杀）', n:1, fen:'r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 0 4',
+    sol:['Qxf7#'],
+    goal:'白方走，<b>一步将死</b>。',
+    tip:'f7 那一格只由黑王一个人看着，而你的后和 c4 的象都指着它。',
+    why:'后吃 f7：c4 的象保护着这个后，黑王吃不了它；d8 的后、f8 的象都来不及救，王也没有别的格子可去。<br>f7 是开局阶段最脆弱的一格——这就是最有名的「学者杀」。' },
+
+  { t:'一步杀（底线）', n:1, fen:'6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1',
+    sol:['Rd8#'],
+    goal:'白方走，<b>一步将死</b>。',
+    tip:'黑王被自己的三个兵关在角落里，它只剩几个横向的格子。',
+    why:'车从 d1 一路走到 d8 将军。黑王被自己的 f7、g7、h7 三个兵锁在底线后：f8、h8 都被车看着，一步都动不了。<br>这种「王被自己的兵闷死在底线」是最常见的死法，所以开局要尽早易位，并且留一个「透气孔」。' },
+
+  { t:'一步杀（车王配合）', n:1, fen:'k7/8/K7/8/8/8/8/7R w - - 0 1',
+    sol:['Rh8#'],
+    goal:'白方走，<b>一步将死</b>。',
+    tip:'光车杀不了光王。看看你自己的王站在 a6，封住了哪几格。',
+    why:'车到 h8 将军。a7、b7、b8 三格全被 a6 的白王控制住，黑王一步也走不了。<br>这是残局的基本功：车负责将军，王负责把逃跑格堵死。光靠车只会把对方逼成和棋（逼和）。' },
+
+  { t:'一步杀（闷杀）', n:1, fen:'6rk/6pp/8/6N1/8/8/8/6K1 w - - 0 1',
+    sol:['Nf7#'],
+    goal:'白方走，<b>一步将死</b>。',
+    tip:'黑王周围那几格，是谁在占着？马不需要保护也能将军。',
+    why:'马跳到 f7 将军。黑王的三个退路全被自己人堵死：g8 是自己的车，g7、h7 是自己的兵。<br>这叫「闷杀」——王被自己的子闷住。而且王够不到 f7（隔着两列），所以马不需要任何保护。' },
+
+  { t:'两步杀（莱加尔弃后）', n:2, fen:'r2qkbnr/ppp2ppp/2np4/4N3/2B1P3/2N5/PPPP1PPP/R1BbK2R w KQkq - 0 6',
+    sol:['Bxf7+','Ke7','Nd5#'],
+    goal:'白方走，<b>两步将死</b>。你会先丢一个子，但那是在逼王。',
+    tip:'黑王还在中间。先想想谁能把它从 e8 逼到唯一的格子上，再用另一个马收网。',
+    why:'象吃 f7 将军——黑王只能走到 e7（d7 被 e5 的马踩着，吃象又不可能）。接着 c3 的马跳 d5 将军：黑王周围八格全被堵死或踩住，而 d5 的马没有任何子能吃到——将死。<br>这是棋史上著名的「莱加尔弃后」：白方先把后白送给对方，就是为了换来这一记绝杀。' },
+
+  { t:'两步杀（弃后开底线）', n:2, fen:'3r2k1/ppp2ppp/2n5/8/8/3Q4/5PPP/4R1K1 w - - 0 1',
+    sol:['Qxd8+','Nxd8','Re8#'],
+    goal:'白方走，<b>两步将死</b>。第一步就是把自己的后送掉。',
+    tip:'黑车 d8 守着底线。想办法把它从底线上换走，然后想想 e1 的车能去哪。',
+    why:'后吃 d8 的车将军，把守着底线的车换掉；黑马吃回来之后，底线就空了——e1 的车走到 e8，黑王被自己的兵锁在底线，f8、h8 都被看着，将死。<br>为了杀王，后是可以不要的。' },
+
+  { t:'两步杀（先引出来再进去）', n:2, fen:'3r2k1/ppp2ppp/8/1Q6/8/8/8/4R1K1 w - - 0 1',
+    sol:['Re8+','Rxe8','Qxe8#'],
+    goal:'白方走，<b>两步将死</b>。',
+    tip:'黑车 d8 守着底线。先用一个子把它拉到 e8，再用另一个子从斜线上进去。',
+    why:'e1 的车冲到底线将军——黑车 d8 只能吃过来（不吃就是绝杀）。它一离开 d8，b5 的后就顺着 b5-c6-d7-e8 的斜线吃掉 e8 上的车，同时封住整条底线，将死。<br>要点：先用便宜的子把守卫引出来，再用贵的子进去收。' },
+
+  { t:'实操 · 后 + 王 杀光王', drill:'Q', fen:'8/8/8/4k3/8/8/8/K5Q1 w - - 0 1',
+    goal:'把黑王一步步逼到边线，再用<b>后 + 王</b>配合将死它。不限步数，走错了我提醒你。',
+    tip:'后单独杀不了光王——它会把王逼得无路可走，判成逼和。正确做法：先用后把王的「笼子」一格一格压小，等它贴到边上，再把自己的王走过来。后尽量离黑王「一个马步」远，这样既能关住格子，又不会被吃。' },
+
+  { t:'实操 · 车 + 王 杀光王', drill:'R', fen:'8/8/8/4k3/8/8/8/K6R w - - 0 1',
+    goal:'把黑王赶到边线，再用<b>车 + 王</b>配合将死。不限步数，走错了我提醒你。',
+    tip:'车和王要分工：车负责在远处把王的笼子一段段切小（永远别让它被王碰到），王负责一步步靠近，把逃跑格堵死。记住：光车杀不了光王，必须王上来帮忙。' }
+];
+
+const LESSONS = [
+  { t:'开局第一件事：占中心', sub:'e4 / d4 / e5 / d5 为什么值钱',
+    intro:'开局只做三件事：<b>占中心、出子、易位</b>。先看第一件 —— 为什么所有教科书都让你先走中心兵。',
+    line:[
+      ['e4','兵占住 e4，一步做两件事：踩住 d5、f5 两个中心格，同时打开白后和 f1 象的斜线。'],
+      ['e5','黑方对称顶住，不让白方一个人占着中心。'],
+      ['Nf3','出马，顺手踩住 e5 的兵 —— 出子要带着威胁，不是为出而出。'],
+      ['Nc6','保护 e5，同时把马放到中心格。'],
+      ['Bc4','象指向 f7：那是黑方最脆弱的一格，只有王一个人在看着。'],
+      ['Bc5','黑方照做，把象也对准白方的 f2。']
+    ],
+    points:[
+      '中心四格 <b>e4 d4 e5 d5</b>：站上去的兵看得最远，而且一走出去就打开自己后和象的路线。',
+      '开局只做三件事：<b>占中心、出子、易位</b>。三件都做完了，中局才开始。',
+      '每一步之前问一句：<b>这步有没有做一件新的事？</b>（占格、攻击、保护、出子）如果没有，多半是废棋。'
+    ] },
+
+  { t:'出子的顺序：马象先出，后留在家', sub:'为什么后早出来是坏事',
+    intro:'开局的子力要按顺序出来。<b>马和象先动，后和车留到中局</b> —— 这条规矩背后是很实在的道理。',
+    line:[
+      ['e4','占中心。'],
+      ['e5','对称顶住。'],
+      ['Nf3','马先出来。'],
+      ['Nc6','黑方跟着出马。'],
+      ['Bc4','象也出来，指向 f7。'],
+      ['Bc5','黑象对准 f2。'],
+      ['c3','准备 d4 再抢一格中心，同时给象留一条退路。'],
+      ['Nf6','黑方出第二匹马，顺便攻击 e4 的兵。'],
+      ['d4','两兵并进，中心形成 d4 + e4 的双兵中心。'],
+      ['exd4','黑方吃掉这个兵，不然白方下一手就把中心吃住了。'],
+      ['cxd4','用 c 兵吃回来，白方在中心稳稳站住两个兵，后和象的路线也全打开了。'],
+      ['Bb4+','黑象插进来将军，逼白方先处理，好缓一口气。'],
+      ['Nc3','用马挡在 c3 —— 顺手把第三个子走到中心。'],
+      ['O-O','黑方也赶紧把王藏进角落。双方子力都到位了，中局从这里开始。']
+    ],
+    points:[
+      '马和象是「一次性投资」：一步出去能长期管用。后出去早了，会被对方的马、象、兵追着打，你一路逃、对方一路出子。',
+      '不要重复动同一个子。开局每一步都应该让一个<b>还没出来的子</b>动起来。',
+      '出子阶段的目标是「把子都摆到位」，不是抢一个兵。为抢兵耽误出子，通常要后悔。'
+    ] },
+
+  { t:'王车易位：一步做完两件事', sub:'什么时候该易位、要满足什么条件',
+    intro:'易位是整盘棋里唯一一步同时动两个子的走法。它的价值在于：<b>王躲进安全的角落，车从角落里走到中间来</b>。',
+    line:[
+      ['e4','占中心。'],
+      ['e5','对称顶住。'],
+      ['Nf3','出马。'],
+      ['Nc6','守护 e5。'],
+      ['Bc4','象指向 f7，路线打开。'],
+      ['Bc5','黑方照做。'],
+      ['Nc3','白方第二个子出来，f1 和 g1 都已经空了。'],
+      ['Nf6','黑方也出完两匹小马。'],
+      ['O-O','时机到了：王从 e1 走到 g1 躲进角落，车从 h1 走到 f1 上场 —— 一步做完两件事。'],
+      ['d6','黑方巩固 e5，同时给 c8 的象让路。']
+    ],
+    points:[
+      '王在中间最危险：中路一开，王就会被「抽」出来。开局阶段中心兵一动，中间的王线随时会暴露。',
+      '易位的三个条件：<b>王和车都没动过</b>、中间两格是空的、王经过的格子不能被对方攻击。',
+      '别把王前面的三个兵推空 —— 那是王的「屋顶」。屋顶掀了，躲在角落也不安全。',
+      '一步易位等于同时走完「王躲起来」和「车出来」两件事，效率高得离谱，所以值得优先安排。'
+    ] },
+
+  { t:'西班牙开局：牵制出来的压力', sub:'1.e4 e5 2.Nf3 Nc6 3.Bb5 —— 最经典的开局',
+    intro:'西班牙开局（Ruy Lopez）的思路很直白：<b>用象牵制住 c6 的马</b>。那匹马背着保护 e5 兵的任务，一旦被钉住不敢动，黑方的中心就松了。',
+    line:[
+      ['e4','占中心。'],
+      ['e5','对称顶住。'],
+      ['Nf3','出马并攻击 e5。'],
+      ['Nc6','黑方用马保护 e5 —— 这是它最重要的任务。'],
+      ['Bb5','西班牙开局：象走到 b5，直接牵制住 c6 那匹马。马一走开，e5 的兵就没人管了。'],
+      ['a6','黑方立刻问一句：你这象要不要换？逼白方当场决定。'],
+      ['Ba4','白象退到 a4，保持这条斜线不动，压力还在。'],
+      ['Nf6','黑方出马反击 e4。'],
+      ['O-O','白方从容易位，王先安全下来。'],
+      ['Be7','黑方也准备易位。'],
+      ['Re1','车走到 e 列，盯住 e5 这个薄弱点。'],
+      ['b5','黑方把象赶走，好把 c6 的马解放出来。'],
+      ['Bb3','白象退到 b3，仍然指着 f7。'],
+      ['d6','黑方补牢 e5。'],
+      ['c3','白方准备 d4，把中心真正抢过来。'],
+      ['O-O','黑方也完成易位。双方都摆好了，中局开始。']
+    ],
+    points:[
+      '牵制的价值：让对方的子「看着却不能动」。西班牙针对的就是 c6 那匹承担防守任务的马。',
+      '被牵制的一方要主动争取自由：黑方用 <b>...a6</b> 再 <b>...b5</b> 把象赶走，那匹马才活过来。',
+      '整条线里黑方一直没走 ...d5 反击中心，这是西班牙的长期主题：白方想慢慢把中心吃住。'
+    ] },
+
+  { t:'西西里防御：黑方为什么不肯对称', sub:'1.e4 c5 —— 半开放开局里最尖锐的一种',
+    intro:'白方走 e4，黑方不跟着顶 e5，而是走 c5 从侧面打。这是一种完全不同的思路：<b>我不跟你抢中心，我先削弱你的中心</b>。',
+    line:[
+      ['e4','白方占中心。'],
+      ['c5','西西里防御：从侧面盯住 d4。黑方暂时让出中心，换一条 c 列的开放线。'],
+      ['Nf3','白方出马，准备 d4。'],
+      ['d6','黑方先加固，不急着反击。'],
+      ['d4','白方建立双兵中心。'],
+      ['cxd4','黑方吃掉：用一个边兵换掉白方一颗中心兵，白方的中心就没那么结实了。'],
+      ['Nxd4','白方用马吃回，恢复中心。'],
+      ['Nf6','黑方出马，攻击 e4 的兵，逼白方表态。'],
+      ['Nc3','白方保护 e4，同时再出一个子。'],
+      ['a6','典型的西西里调度：先管住 b5 格，别让白方的马象挤进来。']
+    ],
+    points:[
+      '西西里的核心是<b>交换</b>：用 c 兵换掉白方的 d 兵，让白方失去「双兵中心」这个优势。',
+      '代价是黑方出子慢、中心薄弱，所以黑方必须走得准、打得快 —— 这就是它又强又危险的原因。',
+      '开放局（e5）和半开放局（c5）的分界就在这里：是抢着对称顶中心，还是从侧面拆你的中心。'
+    ] },
+
+  { t:'后翼弃兵：用一个小兵换整个中心', sub:'1.d4 d5 2.c4 —— 名字叫弃兵，其实不弃',
+    intro:'「后翼弃兵」听着吓人，其实白方根本没打算真的丢掉这个兵 —— <b>它只是想用 c4 这个兵去挑战黑方的 d5，把中心拿到手</b>。',
+    line:[
+      ['d4','从另一侧占中心。d4 比 e4 稳，因为你不太容易被将军。'],
+      ['d5','黑方对称顶住。'],
+      ['c4','后翼弃兵：用 c 兵去攻击 d5。黑方现在面临选择 —— 吃还是不吃？'],
+      ['e6','黑方选择「拒吃」：用 e6 守住 d5，结构很结实，代价是 c8 的象被关在里面。'],
+      ['Nc3','白方继续加压力，再出一个子。'],
+      ['Nf6','黑方出马，也盯着 e4。'],
+      ['Bg5','象出来牵制 f6 的马：马一走开，后面的后或王就暴露了。'],
+      ['Be7','黑方先把象摆好，准备易位。'],
+      ['e3','白方把兵摆成 c4 + d4 + e3 的稳固结构，同时给 f1 象留路。'],
+      ['O-O','黑方完成易位，王安全了。'],
+      ['Nf3','白方也把最后一个小子摆到位置，随时可以易位。'],
+      ['Nbd7','黑方再出一子，把马挪到 d7 后面守住 d5 —— 典型的「拒吃型」后翼弃兵布阵。']
+    ],
+    points:[
+      '名字叫「弃兵」，但如果黑方吃掉 c4，白方用 e3 再 Bxc4 就能拿回来，同时还占了中心 —— 所以这不是真弃。',
+      '黑方有两条路：<b>吃（...dxc4）</b>叫「接受」，白方会快速出子抢回；<b>守（...e6）</b>叫「拒绝」，局面更稳但象被关住。',
+      '后翼弃兵是「位置型」开局的代表：不急着打架，先把结构和子力一点点摆好。'
+    ] }
+];
+
+/* ================================================================
+   规则手册
+   特殊规则光看文字很难真懂 —— 每则都给一个真实局面，点一下棋盘就变成
+   走完之后的样子，条件逐条对着局面讲。
+   全部经 .puzzle-test.js 校验：FEN 合法、示范着法真的走得出来。
+   ================================================================ */
+const RULES = [
+  { t:'王车易位', sub:'唯一一步同时动两个子的走法',
+    fen:'r3k2r/pppq1ppp/2npbn2/2b1p3/2B1P3/2NPBN2/PPPQ1PPP/R3K2R w KQkq - 8 8',
+    intro:'王车易位是全部规则里唯一「一步动两个子」的走法：<b>王朝车的方向走两格，车越过王、落在王刚才经过的那一格</b>。它一步干两件事 —— 把王从最危险的、很容易被攻开的中心藏进角落，同时让一直闲着的那只车上场打仗。',
+    points:[
+      '<b>王和这一侧的车都必须一步都没动过。</b>哪怕走出去又走回来，这一侧的易位权也永久没了。',
+      '<b>王和车中间必须全空。</b>短易位要求 f1、g1 空；长易位要求 b1、c1、d1 都空。',
+      '<b>王正在被将军时不能易位。</b>得先把将军解掉。',
+      '<b>王经过的格子和落点都不能被对方攻击。</b>短易位必须 f1 和 g1 都安全；长易位必须 d1 和 c1 都安全 —— 注意 b1 只要求空着，就算被攻击也不影响。',
+      '一步只能选一侧，而且王动过之后<b>两侧一起作废</b>。所以易位要在王还没被逼走之前尽早做。'
+    ],
+    demos:[
+      { name:'短易位', line:[['O-O','短易位：王 e1 → g1（向右两格），车 h1 → f1 —— 正好是王刚才经过的那一格。走完之后王藏在 g1 的兵墙后面，车从角落里出来，随时能走 f 线或者 d1 这些中心线。']] },
+      { name:'长易位', line:[['O-O-O','长易位：王 e1 → c1（向左两格），车 a1 → d1。方向和短易位相反，条件完全一样。区别是：长易位之后王离中心更远、更安全，但后翼那三个兵少了车保护，a、b 两列容易被对手顺着进攻。']] }
+    ] },
+
+  { t:'吃过路兵', sub:'兵唯一能「平移」吃子的机会',
+    fen:'4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1',
+    intro:'黑方刚把 d7 的兵一次走两格到 d5，想从白方 e5 兵的眼皮底下溜过去。吃过路兵允许白兵<b>当作那个兵只走了一格，把它吃掉</b>。这是全盘唯一一种「明明没人和我站在同一格，我却把旁边的人吃了」的走法。',
+    points:[
+      '只能吃<b>刚刚一次走两格、并且正好从你旁边的格子经过</b>的那个兵。',
+      '而且必须<b>在对方走完的下一步立刻吃</b>。错过这一手，这盘棋就再也没机会吃它了。',
+      '吃法很特别：吃子的兵走到<b>斜前方的空格</b>（这里是 d6），被吃的兵从 d5 被拿走。看起来像兵平移过去吃了。',
+      '只有兵能吃兵。要求你有一个兵正好落在<b>第 5 横排</b>（黑兵来吃时是第 4 横排），而且对方那个兵是刚跳过来的。'
+    ],
+    demos:[
+      { name:'吃它', line:[['exd6','白兵从 e5 斜走到 d6 这个空格，同时把 d5 上的黑兵拿走。现在白兵站在 d6，正好挡在黑方 e5 反击的路上。']] }
+    ] },
+
+  { t:'兵升变', sub:'走到底线的兵，立刻换一个新子',
+    fen:'8/1P1k4/8/8/8/8/8/4K3 w - - 0 1',
+    intro:'兵是唯一永远「长不大」的棋子，所以规则给了它一个出口：<b>走到底线就立刻变成后、车、象或马里的一个</b>。兵一旦过河、离底线越近，价值就越夸张。',
+    points:[
+      '兵走到对方底线（白兵到第 8 排、黑兵到第 1 排）<b>必须立刻升变</b>，不能留在那里继续当兵。',
+      '可以升成<b>后、车、象、马四选一</b>，不是只能升后。绝大多数情况升后最强 —— 但你看下面这个局面。',
+      '升变<b>不额外花一步</b>：走到底线的那一步就是升变本身，顺手还可能直接将军。',
+      '升马常常被忽略，可是它将军的路线和后、车完全不同。有些局面里，升马能立刻叉住王和一个子，比升后还狠。'
+    ],
+    demos:[
+      { name:'升后', line:[['b8=Q','最常用的选择：升后。这里后落在 b8，控制整条第 8 排 —— 注意它<b>没有</b>将军，因为 b8 到 d7 不在一条直线或斜线上。']] },
+      { name:'升马', line:[['b8=N+','同样走到 b8，这次选择升成<b>马</b>。差别就在这一步：马 b8 正好咬着 d7 的黑王，<b>直接将军</b> —— 而刚才升后是不将军的。这就是「升变不是只有升后」的意思。']] }
+    ] },
+
+  { t:'逼和', sub:'没被将军，但一步都走不出来 = 和棋',
+    fen:'k7/8/1Q6/8/8/8/8/4K3 b - - 0 1',
+    hint:'棋盘上白方多一个后，实力上必胜。可现在轮到黑方走 —— 你在棋盘上找一找，黑王还有地方去吗？',
+    intro:'逼和是优势方最容易翻车的一条规则：<b>王没有被将军，但一步合法着法都没有 = 和棋</b>。多一个后、多一辆车，照样算和。这条规则存在的原因很朴素 —— 它给「已经毫无办法的一方」留了一条退路。',
+    points:[
+      '判定条件只有两条：<b>王没被将军</b>，同时<b>没有任何合法着法</b>（不只是王，所有子都动不了才算）。',
+      '一旦成立就是<b>和棋</b>，和子力差多少完全无关。',
+      '这是优势方最常犯的错：把对方的王逼到角落、封死所有出口，忘了给它留一口气。所以<b>逼王之前先数一下它还剩下几格可走</b>。',
+      '别和将死搞混：王被将军又逃不掉，那是<b>将死</b>，你赢；王没被将军却走不了，才是逼和，白忙一场。'
+    ],
+    demos:[] },
+
+  { t:'另外三种和棋', sub:'谁都赢不了的时候，棋局怎么结束',
+    fen:'8/8/4k3/8/8/8/4K3/8 w - - 0 1',
+    hint:'棋盘上现在只剩两个王。白方有 8 步可以走，局面也很「和平」—— 可这盘棋永远不会有胜负。',
+    intro:'除了逼和，还有三种情况会让棋局直接结束为和棋。它们的共同点是：<b>棋盘上谁都赢不了</b>。三条规则的存在意义是一样的 —— 让无法取胜的一方有权利结束这盘棋，而不是被无限拖下去。',
+    points:[
+      '<b>三次重复：</b>同一个局面（同样的子力位置、同样的走子方、同样的易位权和吃过路兵权）出现三次，任一方可以要求判和。本站会自动判。',
+      '<b>五十回合：</b>连续五十个回合既没有吃子、也没有兵移动，判和。所以残局里「不出兵、不吃子」是拖不赢的。',
+      '<b>子力不足：</b>双方剩下的子无论怎么走都不可能将死对方时判和。典型的就是现在这个王对王，或者「王 + 单象 vs 王」「王 + 单马 vs 王」。',
+      '这三条和逼和是同一类东西：<b>它们让「多一个兵」不等于「一定能赢」</b>。残局阶段先算清楚自己的子力到底够不够杀，再决定要不要换子。'
+    ],
+    demos:[] }
+];
+
+/* ---------- 小工具 ---------- */
+const sameMove = (a, b) => !!a && !!b && encM(a) === encM(b);
+const strip = s => String(s || '').replace(/<[^>]+>/g, '');
+const pawnOf = cp => (cp / 100).toFixed(2);                     // 换算成「兵」
+const fmtPawn = cp => (cp >= 0 ? '+' : '−') + pawnOf(Math.abs(cp));
+const posKey = st => (st.lo >>> 0).toString(36) + '.' + (st.hi >>> 0).toString(36);
+function pname(p){ return p ? (colorOf(p) === 'w' ? '白' : '黑') + CN[typeOf(p)] : ''; }
+function cut(s, n){ s = strip(s); return s.length > n ? s.slice(0, n) + '…' : s; }
+
+/* 谁正在丢子：返回 [{sq, piece, by, loss, kind}] */
+function hangingMap(st, who){
+  const opp = other(who), map = new Map();
+  for (const m of legalMoves(st, opp)){
+    if (!m.captured || colorOf(m.captured) !== who) continue;
+    const cur = map.get(m.to);
+    if (cur && PT[typeOf(cur.by)] <= PT[typeOf(m.piece)]) continue;
+    map.set(m.to, {sq: m.to, piece: m.captured, by: m.piece});
+  }
+  return map;
+}
+function hangingLoss(st, who){
+  const out = [];
+  for (const info of hangingMap(st, who).values()){
+    const defs = attacksFrom(st.board, info.sq, who).length;
+    const tv = PT[typeOf(info.piece)], av = PT[typeOf(info.by)];
+    if (!defs) out.push({sq: info.sq, piece: info.piece, by: info.by, loss: tv, kind: 'free'});
+    else if (av < tv) out.push({sq: info.sq, piece: info.piece, by: info.by, loss: tv - av, kind: 'trade'});
+  }
+  return out.sort((a, b) => b.loss - a.loss);
+}
+
+/* 把搜索返回的着法编码还原成可以读的主变 */
+function pvLine(st, codes, max){
+  const out = []; let cur = st;
+  for (const code of (codes || [])){
+    if (out.length >= (max || 6)) break;
+    const mv = legalMoves(cur, cur.turn).find(x => encM(x) === code);
+    if (!mv) break;
+    out.push({san: toSan(cur, mv), cn: cnSan(cur, mv), color: cur.turn});
+    cur = applyMove(cur, mv);
+  }
+  return out;
+}
+const pvText = (list, me) => list.map(x => (x.color === me ? '你 ' : '对方 ') + x.cn).join(' · ');
+
+/* ================================================================
+   解说：每句话都必须来自当前局面的实际计算，不用模板套话
+   ================================================================ */
+function centerHits(st, sq){
+  const c = colorOf(st.board[sq]);
+  if (!c) return [];
+  const hit = new Set();
+  for (const m of genMoves(st, c, false)) if (m.from === sq && CENTER.includes(m.to)) hit.add(sqName(m.to));
+  return Array.from(hit);
+}
+
+/* 后的「早出」判断：后第一次离开 d1/d8 时，马象还没出来几个 */
+const HOME_MINORS = {w: [57, 62, 58, 61], b: [1, 6, 2, 5]};
+function developedMinors(st, color){
+  let n = 0;
+  for (const h of HOME_MINORS[color]){
+    const p = st.board[h];
+    if (!p || typeOf(p) === 'p' || typeOf(p) === 'k') n++;   // 已经离开 / 已经被吃掉
+  }
+  return n;
+}
+function earlyQueen(st, m){
+  if (typeOf(m.piece) !== 'q') return false;
+  const home = colorOf(m.piece) === 'w' ? 59 : 3;            // d1 / d8
+  if (m.from !== home) return false;                         // 后本来就已经不在原位
+  return developedMinors(st, colorOf(m.piece)) < 2;
+}
+
+function explainMove(st, m){
+  const after = applyMove(st, m);
+  const color = colorOf(m.piece), opp = other(color), t = typeOf(m.piece);
+  const oppLegal = legalMoves(after, opp);
+  const giving = inCheck(after.board, opp);
+  const mate = giving && !oppLegal.length;
+  const wasInCheck = inCheck(st.board, color);
+  const opening = st.full <= 10;
+  const back = color === 'w' ? rowOf(m.from) === 7 : rowOf(m.from) === 0;
+  const acts = [], facts = [], warns = [];
+
+  /* ① 这一步做了什么（具体到子和格） */
+  if (m.castle) acts.push('王车' + (m.castle === 'K' ? '短' : '长') + '易位：王 ' + sqName(m.from) + '→' + sqName(m.to) + '，车跟着到中间来');
+  else if (m.promo) acts.push('兵 ' + sqName(m.from) + '→' + sqName(m.to) + ' 升变为' + CN[m.promo]);
+  else if (m.captured) acts.push(CN[t] + ' ' + sqName(m.from) + '→' + sqName(m.to) + '，吃掉' + pname(m.captured) + '（+' + PT[typeOf(m.captured)] + ' 分）');
+  else if (t === 'p') acts.push('兵 ' + sqName(m.from) + '→' + sqName(m.to));
+  else acts.push(CN[t] + ' ' + sqName(m.from) + '→' + sqName(m.to));
+  if (mate) acts.push('将死');
+  else if (giving) acts.push('将军');
+
+  if (mate)
+    return {tag:'将死', kind:'bad', acts, facts:['对方的王躲不开、挡不住，攻击它的子也吃不掉'], warns:[],
+            brief: acts.join('，')};
+
+  /* ② 这颗子自己站不站得住 */
+  const atk = m.castle ? [] : attacksFrom(after.board, m.to, opp);
+  const dfd = m.castle ? [] : attacksFrom(after.board, m.to, color);
+  const cheapA = atk.length ? atk.reduce((a,b) => PT[typeOf(a.piece)] <= PT[typeOf(b.piece)] ? a : b) : null;
+  const loose = !!(cheapA && !dfd.length);
+  const lose = !!(cheapA && (loose || PT[typeOf(cheapA.piece)] < PT[t]));
+
+  if (m.captured){
+    if (!lose) facts.push('吃下去站得住：' + sqName(m.to) + ' 上没人能马上吃回来');
+    else if (loose) warns.push(sqName(m.to) + ' 这颗子没人保护，对方的' + CN[typeOf(cheapA.piece)] + '能立刻吃回来——等于用一个' + CN[t] + '换一个' + CN[typeOf(m.captured)]);
+    else warns.push('对方的' + CN[typeOf(cheapA.piece)] + '能吃到 ' + sqName(m.to) + '：这是一次' + CN[t] + '换' + CN[typeOf(m.captured)] + '，先算清谁赚');
+  }
+
+  /* ③ 这一步造出的威胁（只算真能占到便宜的） */
+  const list = [], seen = new Set();
+  for (const x of genMoves(after, color, false)){
+    if (x.from !== m.to || !x.captured || colorOf(x.captured) !== opp) continue;
+    if (seen.has(x.to)) continue;
+    seen.add(x.to);
+    const d = attacksFrom(after.board, x.to, opp).length > 0;
+    const v = PT[typeOf(x.captured)];
+    if (!d || v > PT[t]) list.push({sq: x.to, piece: x.captured, def: d});
+  }
+  if (list.length && !lose){
+    const free = list.filter(x => !x.def)
+      .sort((a,b) => PT[typeOf(b.piece)] - PT[typeOf(a.piece)]);
+    if (free.length >= 2)
+      facts.push('一步同时攻击 ' + free.slice(0,3).map(x => CN[typeOf(x.piece)] + '（' + sqName(x.sq) + '，没人保护）').join('、') +
+                 '——这是<b>分叉</b>，对方一次只能救一个');
+    else if (free.length === 1)
+      facts.push('盯上 ' + sqName(free[0].sq) + ' 的' + CN[typeOf(free[0].piece)] + '，而它<b>没人保护</b>：对方不来处理，你下一手就能白吃');
+    else
+      facts.push('攻击 ' + sqName(list[0].sq) + ' 的' + CN[typeOf(list[0].piece)] + '，比走过去的' + CN[t] + '值钱，对方必须回头处理，你抢到先手');
+  }
+
+  /* ④ 顺手解掉的围 */
+  if (!m.captured){
+    const before = hangingLoss(st, color).filter(x => x.sq !== m.from);
+    const now = hangingLoss(after, color);
+    const freed = before.filter(b => !now.some(a => a.sq === b.sq));
+    if (freed.length)
+      facts.push('顺手给 ' + sqName(freed[0].sq) + ' 的' + CN[typeOf(freed[0].piece)] + '解了围（走之前它没人管）');
+  }
+
+  /* ⑤ 活动空间的变化 */
+  if (!m.captured && !m.castle){
+    const b4 = genMoves(st, color, false).filter(x => x.from === m.from).length;
+    const af = genMoves(after, color, false).filter(x => x.from === m.to).length;
+    if (af - b4 >= 3) facts.push('这颗子能走的格子从 ' + b4 + ' 个增加到 ' + af + ' 个，位置明显变活');
+    else if (b4 - af >= 3) warns.push('这颗子能走的格子从 ' + b4 + ' 个掉到 ' + af + ' 个，等于把自己堵住了');
+  }
+
+  /* ⑥ 将军之后对方有多少种应法 */
+  if (giving) facts.push('对方现在必须先应付将军，只有 ' + oppLegal.length + ' 种应法');
+
+  /* ⑦ 开局原则：只在真的违反时点名 */
+  if (!wasInCheck){
+    if (earlyQueen(st, m))
+      warns.push('后比马象先出来（对方的马和象会追着它打，白送先手）——先把马象出好、王易位了再动后');
+    if (opening && t === 'n' && (colOf(m.to) === 0 || colOf(m.to) === 7))
+      warns.push('马走到边线 ' + sqName(m.to) + '：它能控制的格子直接少一半');
+    if (opening && t === 'p' && !m.captured && (colOf(m.from) === 0 || colOf(m.from) === 7))
+      warns.push('推边兵（' + sqName(m.from) + '→' + sqName(m.to) + '）既不占中心也不出子，这步可以留着');
+    if (opening && t === 'k' && !m.castle)
+      warns.push('开局阶段王自己走出来最危险，优先王车易位把王藏起来');
+  }
+
+  /* ⑧ 安静的出子也要说清楚它有什么用 */
+  if (!facts.length && !m.captured && !m.castle && (t === 'n' || t === 'b')){
+    const hits = centerHits(after, m.to);
+    if (hits.length) facts.push('落点控制住 ' + hits.join('、') + ' 这些中心格' +
+      (opening ? '——开局先动马象的道理就在这里' : '，把这个区域管住了'));
+  }
+  if (!facts.length && t === 'p' && !m.captured && CENTER.includes(m.to))
+    facts.push('兵占住中心格 ' + sqName(m.to) + '，同时打开自己后和象的斜线');
+
+  const tag = giving ? (mate ? '将死' : '将军') : m.castle ? '王车易位' :
+    m.promo ? '升变' : m.captured ? '吃子' :
+    (opening && (t === 'n' || t === 'b') && back ? '出子' : (t === 'p' ? '推进' : '调子'));
+  const kind = warns.length ? 'warn' : (giving || m.captured ? 'good' : '');
+  return {
+    tag, kind, acts, facts, warns,
+    brief: acts[0] + (facts.length ? '，' + strip(facts[0]) : '')
+  };
+}
+
+/* ---------- 渲染 ---------- */
+function glyphHTML(p){
+  return '<span class="piece ' + colorOf(p) + '">' + GLYPH[typeOf(p)] + '</span>';
+}
+
+function render(){
+  const st = S.st;
+  const checkSq = inCheck(st.board, st.turn) ? findKing(st.board, st.turn) : -1;
+  const mvSet = new Map();
+  S.targets.forEach(m => {
+    const prev = mvSet.get(m.to);
+    if (!prev || (m.captured && !prev.captured)) mvSet.set(m.to, m);
+  });
+
+  const humanLegal = legalMoves(st, S.human);
+  const movableFrom = new Set(humanLegal.map(m => m.from));
+
+  // 提示可以是一步，也可以是一组（易位要同时动王和车）
+  const hints = !S.hint ? [] : (Array.isArray(S.hint) ? S.hint : [S.hint]);
+  const hFrom = new Set(hints.map(h => h.from));
+  const hTo = new Set(hints.map(h => h.to));
+
+  let html = '';
+  for (let i=0;i<64;i++){
+    const r = rowOf(i), c = colOf(i);
+    const cls = ['sq', ((r + c) % 2 === 0) ? 'l' : 'd'];
+    if (S.last && (i === S.last.from || i === S.last.to)) cls.push('last');
+    if (i === S.selected) cls.push('sel');
+    if (hFrom.has(i) || hTo.has(i)) cls.push('hint');
+    // 规则手册用更显眼的一套：起格 / 落格分开着色
+    if (MODE === 'rules'){
+      if (hFrom.has(i)) cls.push('hintFrom');
+      if (hTo.has(i)) cls.push('hintTo');
+    }
+    if (i === checkSq) cls.push('check');
+    const t = mvSet.get(i);
+    if (t) cls.push(t.captured ? 'cap' : 'mv');
+    const p = st.board[i];
+    if (p && colorOf(p) === S.human && !S.busy && !S.over && movableFrom.has(i)) cls.push('movable');
+
+    let inner = '';
+    if (p) inner += glyphHTML(p);
+    const flipped = S.human === 'b';
+    if (!flipped ? r === 7 : r === 0) inner += '<span class="co f">' + FILES[c] + '</span>';
+    if (!flipped ? c === 0 : c === 7) inner += '<span class="co r">' + (8 - r) + '</span>';
+    html += '<div class="' + cls.join(' ') + '" data-i="' + i + '">' + inner + '</div>';
+  }
+  boardEl.innerHTML = html;
+
+  if (S.human === 'b'){
+    const cells = Array.from(boardEl.children);
+    cells.forEach(x => x.remove());
+    for (let i=63;i>=0;i--) boardEl.appendChild(cells[i]);
+  }
+
+  renderTrays();
+  renderMoves();
+  renderHintArrows(hints);
+  renderAudit();
+  renderMeta();
+}
+
+/* 规则手册：把「这一步」画成格子上的箭头。
+   提示只给走法，不直接摆结果 —— 先自己看清从哪走到哪，再点「走给你看」。
+   坐标用棋盘单位（0..8），父元素 .boardwrap 是正方形，所以拉伸也不会变形。 */
+function renderHintArrows(hints){
+  const el = $('hintArrow');
+  if (!el) return;
+  if (MODE !== 'rules' || !hints.length){ el.innerHTML = ''; el.style.display = 'none'; return; }
+  const flip = S.human === 'b';
+  const cx = i => (flip ? 7 - colOf(i) : colOf(i)) + 0.5;
+  const cy = i => (flip ? 7 - rowOf(i) : rowOf(i)) + 0.5;
+  const f = n => n.toFixed(3);
+  let out = '';
+  // 易位要画两支箭头，而王和车都在底排 —— 上下错开一点，两支才分得清
+  const spread = hints.length > 1 ? 0.17 : 0;
+  hints.forEach((h, k) => {
+    const dy0 = spread ? (k === 0 ? -spread : spread) : 0;
+    const x0 = cx(h.from), y0 = cy(h.from) + dy0, x1 = cx(h.to), y1 = cy(h.to) + dy0;
+    const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1;
+    const ux = dx / L, uy = dy / L, px = -uy, py = ux;
+    const sx = x0 + ux * 0.28, sy = y0 + uy * 0.28;
+    const ex = x1 - ux * 0.32, ey = y1 - uy * 0.32;
+    const ax = ex + ux * 0.26, ay = ey + uy * 0.26;
+    const tri = f(ex + px*0.15) + ',' + f(ey + py*0.15) + ' ' +
+                f(ex - px*0.15) + ',' + f(ey - py*0.15) + ' ' + f(ax) + ',' + f(ay);
+    // 先铺一层近白的粗线当描边，深浅格上都看得清；再压一层蓝
+    out += '<line x1="' + f(sx) + '" y1="' + f(sy) + '" x2="' + f(ex) + '" y2="' + f(ey) +
+           '" stroke="#FFFDF8" stroke-width="0.20" stroke-linecap="round"/>' +
+           '<polygon points="' + tri + '" fill="#FFFDF8" stroke="#FFFDF8" stroke-width="0.05" stroke-linejoin="round"/>' +
+           '<line x1="' + f(sx) + '" y1="' + f(sy) + '" x2="' + f(ex) + '" y2="' + f(ey) +
+           '" stroke="#2C6CA8" stroke-width="0.115" stroke-linecap="round"/>' +
+           '<polygon points="' + tri + '" fill="#2C6CA8" stroke="#2C6CA8" stroke-width="0.03" stroke-linejoin="round"/>';
+  });
+  el.innerHTML = out;
+  el.style.display = 'block';
+}
+
+function renderMeta(){
+  if (MODE !== 'play'){
+    $('panelMeta').innerHTML = MODE === 'lesson'
+      ? ('开局课堂 · 第 ' + (LS.idx + 1) + ' / ' + LESSONS.length + ' 节')
+      : MODE === 'rules'
+        ? ('规则手册 · 第 ' + (RI.idx + 1) + ' / ' + RULES.length + ' 则')
+        : ((MODE === 'mate' ? '将死训练' : '战术训练') + ' · 第 ' + (PZ.idx + 1) + ' / ' + modeList().length + ' 题');
+    return;
+  }
+  const st = S.st;
+  let txt = '第 ' + st.full + ' 回合 · ' + (S.human === 'w' ? '你执白' : '你执黑');
+  const an = S.analysis;
+  if (an && an.ordered && an.ordered.length){
+    // S.analysis 永远是在「轮到玩家」时算的，分值本身就是玩家视角
+    txt += '　|　引擎评估 ' + fmtPawn(an.ordered[0].score) + '　|　算到第 ' + an.depth + ' 层';
+  }
+  $('panelMeta').innerHTML = txt;
+}
+
+function renderTrays(){
+  const draw = arr => arr.map(p => '<span style="color:#9C9285">' + GLYPH[typeOf(p)] + '</span>').join('');
+  $('trayTop').innerHTML = draw(S.captured[S.human === 'w' ? 'w' : 'b']);
+  $('trayBot').innerHTML = draw(S.captured[S.human === 'w' ? 'b' : 'w']);
+  const mat = S.captured.w.reduce((a,p) => a + PT[typeOf(p)], 0) -
+              S.captured.b.reduce((a,p) => a + PT[typeOf(p)], 0);
+  const myEdge = S.human === 'w' ? -mat : mat;
+  $('advBot').textContent = myEdge > 0 ? '你领先 +' + myEdge : myEdge < 0 ? '落后 ' + myEdge : '';
+  $('advTop').textContent = '';
+}
+
+function renderMoves(){
+  const body = $('moveBody');
+  $('movesCount').textContent = S.moves.length + ' 手';
+  if (!S.moves.length){
+    body.innerHTML = '<tr><td class="emptyrow" colspan="3">' +
+      ((MODE === 'rules' && S.hint) ? '棋盘上的箭头就是这一步 —— 点「走给你看」，或直接点高亮的两格。' : '还没有走子。') +
+      '</td></tr>';
+    return;
+  }
+  let rows = '';
+  for (let i=0;i<S.moves.length;i+=2){
+    const no = i/2 + 1;
+    const w = S.moves[i], b = S.moves[i+1];
+    rows += '<tr><td class="n">' + no + '.</td>' +
+      '<td class="m"><span' + (i === S.moves.length-1 ? ' class="cur"' : '') + '>' + (w ? w.cn : '') + '</span></td>' +
+      '<td class="m"><span' + (i+1 === S.moves.length-1 ? ' class="cur"' : '') + '>' + (b ? b.cn : '') + '</span></td></tr>';
+  }
+  body.innerHTML = rows;
+  const wrap = $('movesWrap');
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+/* 常驻信息栏：对弈时是「局面体检」，训练时是「题目简报」 */
+function renderAudit(){
+  if (MODE === 'lesson') return renderAuditLesson();
+  if (MODE === 'rules') return renderAuditRule();
+  if (MODE !== 'play') return renderAuditPuzzle();
+  return renderAuditPlay();
+}
+
+function renderAuditRule(){
+  const R = RI.it, box = $('audit');
+  if (!R) return;
+  const d = (R.demos && R.demos.length) ? R.demos[RI.demo] : null;
+  box.innerHTML = '<div class="a-hd">规则要点</div>' +
+    '<div class="brief">' +
+      '<div class="tagline">第 ' + (RI.idx+1) + ' / ' + RULES.length + ' 则 · ' + R.sub + '</div>' +
+      (d ? '<div class="goal"><b>棋盘上画的就是这一步：</b><span class="ln">' +
+             (RI.hint ? RI.hint.label : d.name) + '</span><br>' +
+             (RI.played
+               ? '<span class="muted">已经走出来了 —— 点「回到走之前」可以再看一遍提示。</span>'
+               : '<span class="muted">点「走给你看」，或直接点棋盘上高亮的那两格。</span>') +
+           '</div>' : '') +
+      '<div class="points pts">' + R.points.map(function(p, j){
+        return '<div class="pt"><span class="n">' + (j+1) + '</span><span>' + p + '</span></div>';
+      }).join('') + '</div>' +
+    '</div>';
+}
+
+function renderAuditLesson(){
+  const L = LS.it, box = $('audit');
+  if (!L) return;
+  const step = LS.step;
+  const cur = step > 0 ? L.line[step-1] : null;
+  box.innerHTML = '<div class="a-hd">本节内容</div>' +
+    '<div class="brief">' +
+      '<div class="tagline">第 ' + (LS.idx+1) + ' / ' + LESSONS.length + ' 节 · ' + L.sub + '</div>' +
+      '<div class="goal">' + (cur
+        ? ('已经走到第 <b>' + step + ' / ' + L.line.length + '</b> 步：<span class="ln">' + ((LS.cn && LS.cn[step-1]) || cur[0]) + '</span>')
+        : '还没开始走子 —— 点「下一步」，我们一步一步摆出来。') + '</div>' +
+      (step >= L.line.length ? '<div class="goal"><b>这条线走完了。</b>要点再看一遍，然后点「下一节」。</div>' : '') +
+      // 要点常驻在顶部，不跟着解说滚走
+      '<div class="points pts">' + L.points.map(function(p, j){
+        return '<div class="pt"><span class="n">' + (j+1) + '</span><span>' + p + '</span></div>';
+      }).join('') + '</div>' +
+    '</div>';
+}
+
+function renderAuditPuzzle(){
+  const it = PZ.it, box = $('audit');
+  if (!it) return;
+  const rows = [];
+  const list = modeList();
+  const total = list.length;
+  // 只数当前这一套（战术题和将死题各有各的进度，混在一起数会显示错）
+  let solved = 0;
+  list.forEach(x => { if (PZ.solved[(x.drill ? 'drill' : 'q') + x.fen]) solved++; });
+  rows.push('<div class="row"><span class="ic">' + (PZ.done ? '✓' : '▶') + '</span><span>' +
+    '第 ' + (PZ.idx+1) + ' / ' + total + ' 题　<span class="muted">' + (PZ.done ? '本题已完成' : '轮到' + (S.human === 'w' ? '白方' : '黑方')) + '</span></span></div>');
+  rows.push('<div class="row"><span class="ic">◎</span><span>' +
+    (it.drill ? '目标：把黑王逼到边线并将死' : '目标：' + strip(it.goal)) + '</span></div>');
+  if (!PZ.done && !PZ.revealed && !it.drill && PZ.tries > 0)
+    rows.push('<div class="row bad"><span class="ic">!</span><span>已经试了 ' + PZ.tries + ' 次还没对。点「提示」看思路。</span></div>');
+  if (PZ.done) rows.push('<div class="row good"><span class="ic">★</span><span>主题：<b>' + it.t + '</b>' + (PZ.tries === 0 ? '　<span class="muted">一次做对</span>' : '') + '</span></div>');
+  if (PZ.revealed) rows.push('<div class="row"><span class="ic">i</span><span>已经看过答案，这题不计入完成。</span></div>');
+  // 只提示「你自己的子有没有危险」，不提示对方哪里露了破绽（那会泄题）
+  const risk = hangingLoss(S.st, S.human);
+  if (risk.length && !PZ.done){
+    const r = risk[0];
+    rows.push('<div class="row bad"><span class="ic">!</span><span>你的' + CN[typeOf(r.piece)] + '（' + sqName(r.sq) + '）' +
+      (r.kind === 'free' ? '没人保护，对方现在就能吃掉它' : '会被换掉，净亏 ' + r.loss + ' 分') + '</span></div>');
+  }
+  box.innerHTML = '<div class="a-hd">' + (it.drill ? '演练说明' : '题目简报') + '</div>' + rows.join('');
+}
+
+/* 常驻「局面体检」：只用当前局面的实际计算，说人话 */
+function renderAuditPlay(){
+  const st = S.st, me = S.human, box = $('audit');
+  const rows = [];
+  if (S.over){
+    box.innerHTML = '<div class="a-hd">局面体检</div><div class="row"><span class="ic">■</span><span>对局已结束，点「新对局」再来一局。</span></div>';
+    return;
+  }
+  const myTurn = st.turn === me;
+  const mat = S.captured.w.reduce((a,p) => a + PT[typeOf(p)], 0) -
+              S.captured.b.reduce((a,p) => a + PT[typeOf(p)], 0);
+  const myMat = me === 'w' ? -mat : mat;
+  const an = S.analysis;
+  let head = '第 ' + st.full + ' 回合' + (myTurn ? '，你是' + (me === 'w' ? '白' : '黑') + '方' : '');
+  if (an && an.ordered && an.ordered.length){
+    const cp = an.ordered[0].score;
+    head += '　·　引擎评估 ' + fmtPawn(cp) +
+      (Math.abs(cp) < 25 ? '（均势）' : cp > 0 ? '（你好）' : '（你差）');
+  }
+  if (myMat) head += '　·　子力' + (myMat > 0 ? '你多 ' + myMat : '你少 ' + (-myMat) + ' 分');
+  rows.push('<div class="row"><span class="ic">' + (myTurn ? '▶' : '…') + '</span><span>' +
+    (myTurn ? '轮到你走' : '电脑在想…') + '　<span class="muted">' + head + '</span></span></div>');
+
+  const risk = hangingLoss(st, me);
+  if (risk.length){
+    const r = risk[0];
+    rows.push('<div class="row bad"><span class="ic">!</span><span>你的' + CN[typeOf(r.piece)] + '（' + sqName(r.sq) + '）' +
+      (r.kind === 'free'
+        ? '没人保护，' + pname(r.by) + '现在就能吃掉它'
+        : '会被' + pname(r.by) + '换掉，净亏 ' + r.loss + ' 分') +
+      '　<span class="muted">· 会丢 ' + r.loss + ' 分</span></span></div>');
+  } else {
+    rows.push('<div class="row ok"><span class="ic">✓</span><span>眼下没有白送的子。</span></div>');
+  }
+
+  const gain = hangingLoss(st, other(me));
+  if (myTurn && gain.length){
+    const g = gain[0];
+    rows.push('<div class="row good"><span class="ic">+</span><span>对方的' + CN[typeOf(g.piece)] + '（' + sqName(g.sq) + '）' +
+      (g.kind === 'free'
+        ? '没人保护，你的' + CN[typeOf(g.by)] + '可以直接吃'
+        : '比你的' + CN[typeOf(g.by)] + '值钱，换掉就赚') +
+      '　<span class="muted">· 赚 ' + g.loss + ' 分</span></span></div>');
+  }
+
+  if (myTurn && an && an.pv && an.pv.length){
+    const line = pvText(pvLine(st, an.pv, 5), me);
+    if (line) rows.push('<div class="row"><span class="ic">◎</span><span>双方都走最好的话：<span class="line">' + line + '</span></span></div>');
+  } else if (myTurn && an && an.ordered && an.ordered.length){
+    rows.push('<div class="row"><span class="ic">◎</span><span>引擎认为最好的一步是 <span class="line">' +
+      cnSan(st, an.ordered[0].move) + '</span>　<span class="muted">· 想不出来就点「给我提示」</span></span></div>');
+  }
+  box.innerHTML = '<div class="a-hd">局面体检</div>' + rows.join('');
+}
+
+/* ---------- 教练说话 ---------- */
+function say(opts){
+  const {from = 'coach', tag, tagKind = '', name, san, text, why} = opts;
+  const el = document.createElement('div');
+  el.className = 'msg' + (from === 'me' ? ' me' : '');
+  const nm = name || (from === 'me' ? '你' : '教练');
+  let h = '<div class="av">' + (from === 'me' ? '♙' : '♞') + '</div><div class="body"><div class="hdr">' +
+          '<span class="nm">' + nm + '</span>';
+  if (san) h += '<span class="tag mono">' + san + '</span>';
+  if (tag) h += '<span class="tag ' + tagKind + '">' + tag + '</span>';
+  h += '</div><div class="txt">' + text + '</div>';
+  if (why) h += '<div class="why">' + why + '</div>';
+  h += '</div>';
+  el.innerHTML = h;
+  feedEl.appendChild(el);
+  feedEl.scrollTop = feedEl.scrollHeight;
+}
+
+/* ---------- 对局流程 ---------- */
+function pushHistory(){
+  S.history.push({
+    st: S.st, seq: S.seq.slice(), moves: S.moves.slice(), last: S.last,
+    pos: Object.assign({}, S.pos),
+    captured: {w: S.captured.w.slice(), b: S.captured.b.slice()}
+  });
+}
+
+function playerTurn(){ return !S.over && !S.busy && S.st.turn === S.human; }
+
+/* 子力不足判和：光王、王+单马/单象、同色格象 */
+function insufficientMaterial(st){
+  const minors = [];
+  let sameColor = true, bishopColor = -1;
+  for (let i=0;i<64;i++){
+    const p = st.board[i];
+    if (!p) continue;
+    const t = typeOf(p);
+    if (t === 'k') continue;
+    if (t === 'p' || t === 'r' || t === 'q') return false;
+    minors.push(p);
+    if (t === 'b'){
+      const c = (rowOf(i) + colOf(i)) % 2;
+      if (bishopColor === -1) bishopColor = c;
+      else if (c !== bishopColor) sameColor = false;
+    } else sameColor = false;
+  }
+  if (minors.length <= 1) return true;
+  return sameColor && minors.every(p => typeOf(p) === 'b');
+}
+
+function bumpPos(st){
+  const k = posKey(st);
+  S.pos[k] = (S.pos[k] || 0) + 1;
+  return S.pos[k];
+}
+
+function afterMove(m, mover){
+  if (m.captured) S.captured[other(mover)].push(m.captured);
+  S.last = {from: m.from, to: m.to};
+  S.hint = null; S.selected = -1; S.targets = [];
+}
+
+function analyzeForHuman(){
+  const r = analyze(S.st, HUMAN_AN);
+  if (r) S.analysis = Object.assign({st: S.st}, r);
+}
+
+/* ---- 玩家落子 ---- */
+function humanMove(m){
+  if (S.busy || S.over) return;
+  pushHistory();
+  const stBefore = S.st;
+  const sanEn = toSan(stBefore, m), sanCn = cnSan(stBefore, m);
+  const an = (S.analysis && S.analysis.st === stBefore)
+    ? S.analysis : Object.assign({st: stBefore}, analyze(stBefore, HUMAN_AN));
+  const info = explainMove(stBefore, m);
+  const entry = (an.ordered || []).filter(x => sameMove(x.move, m))[0] || null;
+
+  S.st = applyMove(stBefore, m);
+  S.seq.push(sanEn);
+  S.moves.push({san: sanEn, cn: sanCn, color: S.human});
+  afterMove(m, S.human);
+  const repeats = bumpPos(S.st);
+
+  const isBest = !!an.move && sameMove(an.move, m);
+  const bestScore = an.ordered && an.ordered.length ? an.ordered[0].score : 0;
+  // 没走的那一步在根节点只拿到上界，答不了「这步到底亏多少」，所以单独精确算一遍
+  let myScore = entry ? entry.score : null;
+  let exact = entry ? entry.exact : false;
+  if (!isBest && an.depth){
+    const v = scoreMove(stBefore, m, an.depth, 460);
+    if (v !== null){ myScore = v; exact = true; }
+  }
+  const gap = myScore === null ? 0 : Math.max(0, bestScore - myScore);
+
+  const riskBefore = hangingLoss(stBefore, S.human).filter(x => x.sq !== m.from);
+  const risk = hangingLoss(S.st, S.human);
+  const fresh = risk.filter(r => !riskBefore.some(b => b.sq === r.sq));
+  const lost = fresh.length ? fresh[0].loss : 0;
+
+  let qTag, qKind;
+  if (info.tag === '将死'){ qTag = '绝杀'; qKind = 'good'; }
+  else if (lost >= 3){ qTag = '严重失误'; qKind = 'bad'; }
+  else if (lost >= 2){ qTag = '失误'; qKind = 'bad'; }
+  else if (lost >= 1){ qTag = '丢子'; qKind = 'warn'; }
+  else if (isBest){ qTag = '引擎首选'; qKind = 'good'; }
+  else if (gap <= 30){ qTag = '和首选差不多'; qKind = 'good'; }
+  else if (gap <= 90){ qTag = '可以'; }
+  else if (gap <= 200){ qTag = '欠佳'; qKind = 'warn'; }
+  else if (gap <= 500){ qTag = '失误'; qKind = 'bad'; }
+  else { qTag = '严重失误'; qKind = 'bad'; }
+  if (info.warns.length && (qTag === '引擎首选' || qTag === '和首选差不多') && lost === 0){
+    qTag = '可以商榷'; qKind = 'warn';
+  }
+
+  const why = [];
+  if (info.facts.length) why.push('<em>直接效果：</em>' + info.facts.join('；') + '。');
+  if (info.warns.length) why.push('<em>注意：</em>' + info.warns.join('；') + '。');
+
+  if (entry && an.ordered && an.ordered.length > 1){
+    if (isBest){
+      why.push('<em>引擎评估：</em>它也算出这是最好的一步，局面分 ' + fmtPawn(bestScore) + '。');
+    } else if (gap <= 8){
+      why.push('<em>引擎评估：</em>它算出的最好一步是 <b>' + cnSan(stBefore, an.move) + '</b>，但你这步跟它基本等价（都是 ' + fmtPawn(bestScore) + '）。');
+    } else {
+      why.push('<em>引擎评估：</em>这步把局面分走到 ' + fmtPawn(myScore === null ? entry.score : myScore) +
+        '，它更看好 <b>' + cnSan(stBefore, an.move) + '</b>（' + fmtPawn(bestScore) + '），' +
+        (exact ? '差 ' : '至少差 ') + pawnOf(gap) + ' 个兵。');
+      const alts = an.ordered.filter(x => !sameMove(x.move, m)).slice(0, 2);
+      if (alts.length && gap > 50){
+        why.push('<em>更值得想的走法：</em>' + alts.map(a => {
+          const si = explainMove(stBefore, a.move);
+          return '<b>' + cnSan(stBefore, a.move) + '</b>（' + cut(si.facts.length ? si.facts[0] : si.acts[0], 42) + '）';
+        }).join('；') + '。');
+      }
+    }
+  }
+
+  say({
+    from:'me', name:'你（' + (S.human === 'w' ? '白' : '黑') + '）', san: sanCn,
+    tag: qTag, tagKind: qKind,
+    text: info.acts.join('，') + '。',
+    why: why.join('<br>')
+  });
+
+  render();
+  if (checkEnd(repeats)) return;
+  S.busy = true;
+  setChip('电脑思考中…', 'think');
+  render();
+  window.setTimeout(engineTurn, 300);
+}
+
+/* ---- 电脑落子 ---- */
+function engineTurn(){
+  const st = S.st;
+  if (S.over) return;
+  const level = parseInt($('level').value, 10) || 2;
+  const key = S.seq.join(' ');
+  let move = null, bookNote = '', res = null;
+
+  if (BOOK[key]){
+    const cands = [];
+    for (const m of legalMoves(st, st.turn)){
+      const san = toSan(st, m);
+      if (BOOK[key][san]) cands.push({m, san, note: BOOK[key][san]});
+    }
+    if (cands.length){
+      const p = cands[Math.floor(Math.random() * cands.length)];
+      move = p.m; bookNote = p.note;
+    }
+  }
+  if (!move){
+    res = engineChoose(st, level);
+    move = res ? res.move : null;
+  }
+  if (!move){ S.busy = false; checkEnd(1); return; }
+
+  const info = explainMove(st, move);
+  const sanEn = toSan(st, move), sanCn = cnSan(st, move);
+  pushHistory();
+  S.st = applyMove(st, move);
+  S.seq.push(sanEn);
+  S.moves.push({san: sanEn, cn: sanCn, color: other(S.st.turn)});
+  afterMove(move, other(S.st.turn));
+  const repeats = bumpPos(S.st);
+
+  const why = [];
+  if (bookNote){
+    why.push('<em>开局库：</em>' + bookNote);
+  } else if (info.facts.length){
+    why.push('<em>直接效果：</em>' + info.facts.join('；') + '。');
+  }
+  if (info.warns.length) why.push('<em>它这步的代价：</em>' + info.warns.join('；') + '。');
+  if (!bookNote && res && !res.picked && res.pv && res.pv.length > 1 && sameMove(res.ordered[0].move, move)){
+    const line = pvLine(st, res.pv, 5);
+    if (line.length > 1){
+      why.push('<em>它的打算：</em>' + line.map(x => (x.color === S.human ? '你 ' : '它 ') + x.cn).join(' · ') +
+               '　<span class="muted">（算到第 ' + res.depth + ' 层，' + res.ms + 'ms）</span>');
+    }
+  }
+  if (!bookNote && res){
+    // res.score 是电脑视角，取反就是玩家视角
+    const cp = -res.score;
+    why.push('<em>此时局面：</em>' + (Math.abs(cp) < 25 ? '基本均势'
+      : cp > 0 ? '你领先约 ' + pawnOf(cp) + ' 个兵' : '你落后约 ' + pawnOf(-cp) + ' 个兵') + '。');
+  }
+
+  say({
+    from:'coach', name: S.human === 'w' ? '电脑（黑）' : '电脑（白）', san: sanCn,
+    tag: info.tag, tagKind: info.kind,
+    text: info.acts.join('，') + '。',
+    why: why.join('<br>')
+  });
+
+  render();
+  if (checkEnd(repeats)) return;
+
+  S.busy = false;
+  setChip('轮到你了');
+  render();
+  // 先让棋盘显示出来，再算「给玩家这步打分」需要的分析
+  window.setTimeout(() => { analyzeForHuman(); renderAudit(); renderMeta(); }, 30);
+}
+
+function setChip(txt, cls){
+  const c = $('stateChip');
+  c.textContent = txt;
+  c.className = 'chip' + (cls ? ' ' + cls : '');
+}
+
+function checkEnd(repeats){
+  const st = S.st;
+  const legal = legalMoves(st, st.turn);
+  if (!legal.length){
+    S.over = true; S.busy = false;
+    if (inCheck(st.board, st.turn)){
+      const winner = other(st.turn);
+      say({ from:'coach', name:'教练', tag:'对局结束',
+        text: winner === S.human ? '恭喜，你把电脑<b>将死</b>了。' : '这局被将死了。别急——点「悔棋一步」回到刚才，我们换个走法再试试。',
+        why:'<em>复盘提示：</em>被将死前那两三步，通常已经出现「王前兵被推空」或「防守子力被调走」的信号，往回退两步就能看到。' });
+    } else {
+      say({ from:'coach', name:'教练', tag:'和棋', text:'<b>逼和</b>——王没被将军，但一步都走不了。占优的时候要小心别把对方逼到无路可走。' });
+    }
+    setChip('对局结束', 'over');
+    render();
+    return true;
+  }
+  if (insufficientMaterial(st)){
+    S.over = true; S.busy = false;
+    say({ from:'coach', name:'教练', tag:'和棋', text:'剩下的子力已经不够将死了（比如只剩光王，或只有单马单象），按规则判和。' });
+    setChip('对局结束', 'over');
+    render();
+    return true;
+  }
+  if (st.half >= 100){
+    S.over = true; S.busy = false;
+    say({ from:'coach', name:'教练', tag:'和棋', text:'50 回合里没有吃子也没有动兵，按规则判和。' });
+    setChip('对局结束', 'over');
+    render();
+    return true;
+  }
+  if (repeats >= 3){
+    S.over = true; S.busy = false;
+    say({ from:'coach', name:'教练', tag:'和棋', text:'同一个局面出现了三次，按规则判和。想赢就不能一直来回走同样的子，得换条线。' });
+    setChip('对局结束', 'over');
+    render();
+    return true;
+  }
+  return false;
+}
+
+/* ---------- 交互 ---------- */
+/* 注意：棋盘点击只有一个处理器，在文件末尾的「模式与训练流程」里按模式分流。
+   这里曾再注册一个对弈专用的处理器，两个都会触发，导致刚选中的子被第二个
+   处理器立刻取消选中 —— 表现为「棋子点不动」。不要在这里再注册监听。 */
+
+function askPromotion(to, mvs){
+  promoRow.innerHTML = '';
+  ['q','r','b','n'].forEach(q => {
+    const b = document.createElement('button');
+    b.innerHTML = '<span class="piece ' + S.human + '" style="font-size:28px">' + GLYPH[q] + '</span>';
+    b.onclick = () => {
+      promoEl.style.display = 'none';
+      const mv = mvs.find(x => x.promo === q);
+      if (!mv) return;
+      // 升变不只是对弈里有 —— 战术题也可能要升变，得走对应模式的处理
+      if (MODE === 'play') humanMove(mv); else puzzleMove(mv);
+    };
+    promoRow.appendChild(b);
+  });
+  promoEl.style.display = 'grid';
+}
+
+/* ================================================================
+   模式与训练流程
+   ================================================================ */
+let MODE = 'play';
+let PZ = { list:[], idx:0, it:null, step:0, tries:0, done:false, revealed:false, undo:[], solved:{} };
+let LS = { idx:0, it:null, step:0, cn:[] };
+let RI = { idx:0, it:null, demo:0, cn:[], played:false, hint:null };
+
+const modeList = () => MODE === 'mate' ? MATES : TACTICS;
+
+function setupStrips(human){
+  // 课堂 / 规则手册只是把局面摆出来看，不区分「你」和「电脑」
+  if (MODE === 'lesson' || MODE === 'rules'){
+    $('topWho').textContent = '白方'; $('botWho').textContent = '黑方';
+    $('topSub').textContent = '执白 · 先手'; $('botSub').textContent = '执黑 · 后手';
+    $('stripTop').querySelector('.avatar').className = 'avatar w';
+    $('stripBot').querySelector('.avatar').className = 'avatar b';
+    $('stripTop').querySelector('.avatar').textContent = '♔';
+    $('stripBot').querySelector('.avatar').textContent = '♚';
+    return;
+  }
+  $('topWho').textContent = '电脑'; $('botWho').textContent = '你';
+  $('topSub').textContent = human === 'w' ? '执黑 · 后手' : '执白 · 先手';
+  $('botSub').textContent = human === 'w' ? '执白 · 先手' : '执黑 · 后手';
+  $('stripTop').querySelector('.avatar').className = 'avatar ' + (human === 'w' ? 'b' : 'w');
+  $('stripBot').querySelector('.avatar').className = 'avatar ' + (human === 'w' ? 'w' : 'b');
+  $('stripTop').querySelector('.avatar').textContent = human === 'w' ? '♚' : '♔';
+  $('stripBot').querySelector('.avatar').textContent = human === 'w' ? '♔' : '♚';
+}
+
+function resetState(st, human){
+  S = { st, human, seq: [], history: [], moves: [], pos: {}, last: null,
+        selected: -1, targets: [], hint: null, busy: false, over: false,
+        analysis: null, captured: {w: [], b: []} };
+  bumpPos(st);
+  clearTT();
+  feedEl.innerHTML = '';
+  $('promo').style.display = 'none';
+}
+
+/* ---------------- 操作栏（按模式生成） ---------------- */
+function renderCtl(){
+  const row = $('ctlRow');
+  const chip = t => '<span class="chip stateChip' + (t ? ' ' + t : '') + '" id="stateChip"></span>';
+  if (MODE === 'play'){
+    row.innerHTML = '<button id="btnUndo" class="grow">悔棋一步</button>' +
+                    '<button id="btnHintOne">给我提示</button>' + chip('');
+    $('btnUndo').onclick = undoPlay;
+    $('btnHintOne').onclick = doHint;
+  } else if (MODE === 'lesson'){
+    row.innerHTML =
+      '<button id="btnPrevLesson">上一节</button>' +
+      '<button id="btnPrevStep">上一步</button>' +
+      '<button id="btnNextStep" class="primary">下一步</button>' +
+      '<button id="btnNextLesson">下一节</button>' + chip('');
+    $('btnPrevLesson').onclick = () => loadLesson(LS.idx - 1);
+    $('btnNextLesson').onclick = () => loadLesson(LS.idx + 1);
+    $('btnPrevStep').onclick = () => lessonGoto(LS.step - 1);
+    $('btnNextStep').onclick = () => lessonGoto(LS.step + 1);
+  } else if (MODE === 'rules'){
+    const R = RI.it;
+    const demos = (R && R.demos) ? R.demos : [];
+    let html = '<button id="btnPrevRule">上一则</button>';
+    demos.forEach(function(d, k){
+      html += '<button id="btnDemo' + k + '" class="sm' + (k === RI.demo ? ' on' : '') + '">' + d.name + '</button>';
+    });
+    if (demos.length){
+      // 默认只给提示，点了才真的走 —— 这样棋盘上「走之前」和「走之后」分得清
+      html += RI.played
+        ? '<button id="btnRuleBack" class="grow">回到走之前</button>'
+        : '<button id="btnRulePlay" class="grow primary">走给你看</button>';
+    }
+    html += '<button id="btnNextRule">下一则</button>' + chip('');
+    row.innerHTML = html;
+    $('btnPrevRule').onclick = () => loadRule(RI.idx - 1);
+    $('btnNextRule').onclick = () => loadRule(RI.idx + 1);
+    demos.forEach(function(d, k){
+      const b = $('btnDemo' + k);
+      if (b) b.onclick = () => { RI.demo = k; ruleShow(); };
+    });
+    const bp = $('btnRulePlay'); if (bp) bp.onclick = rulePlay;
+    const bb = $('btnRuleBack'); if (bb) bb.onclick = ruleShow;
+  } else {
+    const isDrill = !!(PZ.it && PZ.it.drill);
+    row.innerHTML =
+      '<button id="btnPrevQ">上一题</button>' +
+      '<button id="btnRetry">重来</button>' +
+      '<button id="btnHintQ">' + (isDrill ? '口诀' : '提示') + '</button>' +
+      '<button id="btnAnsQ">' + (isDrill ? '讲思路' : '看答案') + '</button>' +
+      '<button id="btnNextQ"' + (PZ.done ? ' class="primary"' : '') + '>下一题</button>' + chip('');
+    $('btnPrevQ').onclick = () => loadPuzzle(PZ.idx - 1);
+    $('btnNextQ').onclick = () => loadPuzzle(PZ.idx + 1);
+    $('btnRetry').onclick = () => loadPuzzle(PZ.idx);
+    $('btnHintQ').onclick = pzHint;
+    $('btnAnsQ').onclick = pzAnswer;
+  }
+}
+
+function setChip(txt, cls){
+  Array.prototype.forEach.call(document.querySelectorAll('.stateChip'), function(c){
+    c.textContent = txt;
+    c.className = 'chip stateChip' + (cls ? ' ' + cls : '');
+  });
+}
+
+/* ---------------- 对弈模式的共享函数 ---------------- */
+function undoPlay(){
+  if (S.busy) return;
+  if (!S.history.length){
+    say({ from:'coach', name:'教练', tag:'提示', text:'现在还没有可以悔的棋，先走一步吧。' });
+    return;
+  }
+  while (S.history.length){
+    const h = S.history.pop();
+    S.st = h.st; S.seq = h.seq; S.moves = h.moves; S.last = h.last;
+    S.pos = h.pos; S.captured = h.captured;
+    if (S.st.turn === S.human) break;
+  }
+  S.over = false; S.selected = -1; S.targets = []; S.hint = null;
+  setChip('轮到你了');
+  analyzeForHuman();
+  say({ from:'coach', name:'教练', tag:'已悔棋',
+    text:'退回来了。这次先问自己一句：<b>对方上一步在威胁什么？</b>答案通常就在右边的「局面体检」里。' });
+  render();
+}
+
+/* ---------------- 对弈模式：给我提示 ---------------- */
+function doHint(){
+  if (S.busy || S.over) return;
+  const st = S.st;
+  const an = (S.analysis && S.analysis.st === st) ? S.analysis : analyze(st, HUMAN_AN);
+  if (!an || !an.move){
+    say({ from:'coach', name:'教练', tag:'提示',
+      text:'这个局面很安静，没有一眼能挑出来的好棋。先问自己两句：<b>对方上一步在威胁什么？我哪颗子没人保护？</b>' });
+    render();
+    return;
+  }
+  S.analysis = Object.assign({st: st}, an);
+  const info = explainMove(st, an.move);
+  const alts = (an.ordered || []).filter(x => !sameMove(x.move, an.move)).slice(0, 2);
+  const pv = pvLine(st, an.pv, 5);
+  say({
+    from:'coach', name:'教练', tag:'提示', tagKind:'good',
+    text: '我会走 <b>' + cnSan(st, an.move) + '</b>。' + (info.acts.length ? info.acts.join('，') + '。' : ''),
+    why: '<em>为什么是它：</em>' + (info.facts.length ? info.facts.join('；') + '。' : '它把局面评估分推到最高。') +
+         (info.warns.length ? '<br><em>但也留意：</em>' + info.warns.join('；') + '。' : '') +
+         (pv.length > 1 ? '<br><em>接下来可能这么走：</em><span class="line">' + pvText(pv, S.human) + '</span>' : '') +
+         (alts.length ? '<br><em>另外两步也不错：</em>' + alts.map(a => '<b>' + cnSan(st, a.move) + '</b>').join('、') + '。' : '') +
+         '<br><em>局面评估：</em>' + fmtPawn(an.score) + '（你的视角），算到第 ' + an.depth + ' 层。'
+  });
+  S.hint = {from: an.move.from, to: an.move.to};
+  render();
+}
+
+function newGame(human){
+  resetState(parseFen(START_FEN), human);
+  $('movesTitle').textContent = '棋谱';
+  setupStrips(human);
+  renderCtl();
+  say({
+    from:'coach', name:'教练', tag:'开始',
+    text: '你走' + (human === 'w' ? '白棋先手' : '黑棋后手') + '。右边那栏「局面体检」是常驻的，每一步都告诉你：<b>谁在威胁谁、你哪颗子悬着、对方哪颗子没人管</b>。',
+    why:'<em>开局三原则：</em>① 用兵占中心（e4/d4/e5/d5）；② 先出马和象，别急着动后；③ 尽早王车易位。' +
+        '<br><em>每步我都会给你打分：</em>用同一个引擎再算一遍这个局面，看你走的是不是它认为最好的那一步、差多少。'
+  });
+  if (human === 'w'){
+    setChip('轮到你了');
+    render();
+    window.setTimeout(() => { analyzeForHuman(); renderAudit(); renderMeta(); }, 30);
+  } else {
+    S.busy = true;
+    setChip('电脑思考中…', 'think');
+    render();
+    window.setTimeout(engineTurn, 400);
+  }
+}
+
+/* ---------------- 题目：加载 ---------------- */
+function loadPuzzle(i){
+  const list = modeList();
+  PZ.list = list;
+  PZ.idx = ((i % list.length) + list.length) % list.length;
+  const it = list[PZ.idx];
+  PZ.it = it; PZ.step = 0; PZ.tries = 0; PZ.done = false; PZ.revealed = false; PZ.undo = [];
+  const st0 = parseFen(it.fen);
+  resetState(st0, st0.turn);
+  $('movesTitle').textContent = it.drill ? '演练着法' : '本题着法';
+  setupStrips(S.human);
+  renderCtl();
+  say({
+    from:'coach', name:'教练', tag:'第 ' + (PZ.idx+1) + ' / ' + list.length + ' 题',
+    text: it.goal,
+    why: it.drill ? '<em>怎么走：</em>直接点棋盘上的子走子，我会每步给你评价。' :
+        '<em>要求：</em>找出一着手（或多手）达成目标。走错了我不动棋盘，你可以接着想 —— 想不出来再点「提示」和「看答案」。'
+  });
+  render();
+}
+
+/* ---------------- 题目：走子 ---------------- */
+function pzApply(m){
+  const cn = cnSan(S.st, m), san = toSan(S.st, m), who = colorOf(m.piece);
+  S.st = applyMove(S.st, m);
+  S.moves.push({san, cn, color: who});
+  S.last = {from: m.from, to: m.to};
+  S.selected = -1; S.targets = []; S.hint = null;
+  return {cn, san, who};
+}
+
+function pzSnapshot(){ PZ.undo.push({st: S.st, moves: S.moves.slice(), last: S.last}); }
+function pzRollback(){
+  const h = PZ.undo.pop();
+  if (!h) return;
+  S.st = h.st; S.moves = h.moves; S.last = h.last;
+  S.selected = -1; S.targets = []; S.hint = null;
+}
+
+function puzzleMove(m){
+  const it = PZ.it;
+  if (PZ.done || PZ.revealed || S.busy) return;
+  if (it.drill){ drillMove(m); return; }
+
+  const expect = it.sol[PZ.step];
+  const san = toSan(S.st, m);
+  if (san === expect){
+    const info = explainMove(S.st, m);
+    pzSnapshot();
+    const r = pzApply(m);
+    PZ.step++;
+    if (PZ.step >= it.sol.length){ pzWin(); return; }
+    const rep = it.sol[PZ.step];
+    render();
+    setChip('对方应手…', 'think');
+    window.setTimeout(() => {
+      const rm = moveFromSan(S.st, rep);
+      if (!rm){ pzWin(); return; }
+      const rinfo = explainMove(S.st, rm);
+      pzSnapshot();
+      const rr = pzApply(rm);
+      PZ.step++;
+      say({ from:'coach', name:'对方的应手', san: rr.cn, tag: rinfo.tag, tagKind: rinfo.kind,
+            text: rinfo.acts.join('，') + '。' });
+      if (PZ.step >= it.sol.length){ pzWin(); return; }
+      setChip('轮到你了');
+      render();
+    }, 430);
+    return;
+  }
+  pzWrong(m, san, expect);
+}
+
+function pzWrong(m, san, expect){
+  PZ.tries++;
+  const it = PZ.it;
+  const info = explainMove(S.st, m);
+  const keyMv = moveFromSan(S.st, expect);
+  const an = analyze(S.st, {maxDepth:6, timeMs:300});
+  const best = (an.ordered && an.ordered.length) ? an.ordered[0].score : 0;
+  const d = Math.max(3, Math.min(6, an.depth || 4));
+  const mine = scoreMove(S.st, m, d, 330);
+  const gap = (mine === null) ? null : Math.max(0, best - mine);
+
+  const why = [];
+  if (info.warns.length) why.push('<em>这步的问题：</em>' + info.warns.join('；') + '。');
+  else if (info.facts.length) why.push('<em>这步做了什么：</em>' + info.facts.join('；') + '。');
+  if (gap !== null && gap <= 25 && keyMv){
+    why.push('<em>其实不差：</em>这步和本题答案几乎等价（差 ' + pawnOf(gap) + ' 个兵），但答案更干净利落：' + strip(explainMove(S.st, keyMv).acts[0]) + '。');
+  } else if (gap !== null && gap < 120){
+    why.push('<em>离得近：</em>思路对了，但位置或顺序不对，局势差了 ' + pawnOf(gap) + ' 个兵。');
+  }
+  if (PZ.tries >= 2) why.push('<em>提示：</em>' + it.tip);
+  if (PZ.tries >= 3) why.push('<em>还是想不出来？</em>点下面的「看答案」，我会把完整思路讲一遍。');
+
+  say({ from:'me', name:'你（' + (S.human === 'w' ? '白' : '黑') + '）', san: cnSan(S.st, m),
+        tag: PZ.tries >= 3 ? '不对 ×' + PZ.tries : '不是这个', tagKind: PZ.tries >= 3 ? 'bad' : 'warn',
+        text: '没有走到目标的着法上。棋盘保持原样，再想想。',
+        why: why.join('<br>') });
+  render();
+}
+
+function pzWin(){
+  PZ.done = true;
+  const it = PZ.it;
+  const perfect = PZ.tries === 0;
+  PZ.solved[(it.drill ? 'drill' : 'q') + it.fen] = true;
+  // 演练题没有 it.why（它的讲解在 it.tip 里），别把 undefined 打到屏幕上
+  const tail = it.why || it.tip || '';
+  if (it.drill){
+    say({ from:'coach', name:'教练', tag:'练成了', tagKind:'good',
+          text: '<b>' + it.t + '</b>：黑王已经被将死，一共用了 <b>' + Math.ceil(S.moves.length / 2) + ' 个回合</b>。' +
+                (tail ? '<br>' + tail : ''),
+          why: '<em>记住这个套路：</em>先用车/后在远处把对方的王一段一段圈小，王不到位就永远杀不掉；' +
+               '每次落子前先算一下「对方还剩几格可走」，剩最后一格时把它逼死就是将杀，堵早了就是逼和。' });
+  } else {
+    say({ from:'coach', name:'教练', tag: perfect ? '一次做对' : '完成', tagKind:'good',
+          text: '<b>' + it.t + '</b>。<br>' + tail,
+          why: perfect ? '<em>干净：</em>一次就找到，说明你已经在用「找没保护的子 / 找能同时管住两格的位置」这套方法了。'
+                       : '<em>多做几遍同类题：</em>认得出模式，实战里才能一眼看出来。' });
+  }
+  setChip('本题完成', 'over');
+  render();
+  maybeAutoNext();
+}
+
+function maybeAutoNext(){ renderCtl(); }
+
+function pzHint(){
+  const it = PZ.it;
+  say({ from:'coach', name:'教练', tag:'提示', text: it.tip });
+}
+
+function pzAnswer(){
+  const it = PZ.it;
+  if (it.drill){ say({ from:'coach', name:'教练', tag:'提示', text: it.tip }); return; }
+  PZ.revealed = true;
+  const first = moveFromSan(S.st, it.sol[PZ.step]);
+  const line = [];
+  let cur = S.st;
+  for (let k = PZ.step; k < it.sol.length; k++){
+    const mv = moveFromSan(cur, it.sol[k]);
+    if (!mv) break;
+    line.push({cn: cnSan(cur, mv), color: cur.turn});
+    cur = applyMove(cur, mv);
+  }
+  say({ from:'coach', name:'教练', tag:'答案', tagKind:'good',
+        text: '标准答案是 <b>' + (first ? cnSan(S.st, first) : it.sol[PZ.step]) + '</b>。',
+        why: (line.length > 1 ? '<em>整条线：</em><span class="line">' + line.map(x => (x.color === S.human ? '你 ' : '对方 ') + x.cn).join(' · ') + '</span><br>' : '') +
+             '<em>主题：</em>' + it.t + '<br>' + it.why });
+  render();
+}
+
+/* ---------------- 残局演练（后 / 车 杀光王） ---------------- */
+function kingMobility(st, color){
+  const k = findKing(st.board, color);
+  if (k < 0) return 0;
+  let n = 0;
+  const r = rowOf(k), c = colOf(k);
+  for (const d of QD){
+    const rr = r + d[0], cc = c + d[1];
+    if (!inB(rr, cc)) continue;
+    const j = rr*8 + cc, p = st.board[j];
+    if (p && colorOf(p) === color) continue;
+    if (isAttacked(st.board, j, other(color))) continue;
+    n++;
+  }
+  return n;
+}
+function edgeDist(st, color){
+  const k = findKing(st.board, color);
+  if (k < 0) return 0;
+  const r = rowOf(k), c = colOf(k);
+  return Math.min(r, c, 7-r, 7-c);
+}
+
+function drillMove(m){
+  const it = PZ.it;
+  const foe = other(S.human);
+  const eBefore = kingMobility(S.st, foe), dBefore = edgeDist(S.st, foe);
+  pzSnapshot();
+  const r = pzApply(m);
+  const after = S.st;
+  S.busy = false;
+
+  const legal = legalMoves(after, after.turn);
+  if (!legal.length){
+    if (inCheck(after.board, after.turn)){ pzWin(); return; }
+    pzRollback();
+    say({ from:'me', name:'你', san: r.cn, tag:'逼和', tagKind:'bad',
+          text: '这一手走成了<b>逼和</b>：黑王没被将军，但一步都走不了，按规则算和棋。<br>棋盘已经退回去了。',
+          why: '<em>怎么避免：</em>每次把王逼到边上前，先看它还剩几格可走。只剩最后一格的时候，别急着把它堵死——留一格给它走，然后把自己的王走过来。' });
+    render();
+    return;
+  }
+
+  // 只会被黑王吃（盘上就它一个黑子）。这里必须用「走完之后这格被谁攻击」来判断，
+  // 之前写成 typeOf(after.board[m.to]) === typeOf(m.piece) 恒为真，等于没判。
+  const target = typeOf(m.piece) === 'q' ? '后' : '车';
+  if (isAttacked(after.board, m.to, foe)){
+    say({ from:'me', name:'你', san: r.cn, tag:'会送掉' + target, tagKind:'bad',
+          text: '这手把' + target + '送到黑王嘴边（' + sqName(m.to) + ' 正好在王的一步之内），它下一步就能吃掉。棋盘退回去了。',
+          why: '<em>记住：</em>' + (target === '后'
+            ? '后要离黑王至少隔一个「马步」，并且永远站在自己王能保护到的地方。'
+            : '车千万别走到和黑王相邻的格子上——先用王把距离拉开，再动车。') });
+    pzRollback();
+    render();
+    return;
+  }
+
+  const eAfter = kingMobility(after, foe), dAfter = edgeDist(after, foe);
+  const why = [];
+  if (eAfter < eBefore){
+    why.push('<em>有进展：</em>黑王能走的格子从 ' + eBefore + ' 个减到 ' + eAfter + ' 个，笼子在收紧。');
+  } else if (eAfter > eBefore){
+    why.push('<em>松了：</em>黑王的活动格从 ' + eBefore + ' 个涨到 ' + eAfter + ' 个。收紧的时候，每一步都应该至少不让它变多。');
+  } else {
+    why.push('<em>原地踏步：</em>黑王的活动格还是 ' + eAfter + ' 个。');
+  }
+  if (dAfter === 0) why.push('<em>下一步：</em>黑王已经贴到边线了，现在把自己的王走过来帮忙——王不到位，' + target + '永远杀不掉它。');
+  else if (dAfter < dBefore) why.push('<em>方向对：</em>黑王离边线更近了，继续把它往边上赶。');
+  else why.push('<em>方向：</em>目标是把黑王赶到<b>边线或角落</b>——在中心它是杀不掉的。');
+
+  say({ from:'me', name:'你', san: r.cn, tag:'演练', text: '走了一步。', why: why.join('<br>') });
+  // 黑王不能是木头 —— 没人应手，这盘棋就永远走不到将死
+  if (after.turn !== S.human){
+    S.busy = true;                                  // 等它应手，这期间别再落子
+    setChip('黑王在想…', 'think');
+    render();
+    window.setTimeout(drillReply, 420);
+    return;
+  }
+  setChip('已经 ' + S.moves.length + ' 手');
+  render();
+}
+
+/* 黑王的逃跑逻辑：活动格越多越好，同时往中心跑（角上是死路）。
+   用「撑大笼子 + 往中间躲」当防守目标，人练的才是真正的逼王技术。 */
+function drillReply(){
+  if (MODE !== 'mate' || !PZ.it || !PZ.it.drill || PZ.done) return;
+  const foe = other(S.human);
+  const st = S.st;
+  if (st.turn !== foe) return;
+  const ms = legalMoves(st, foe);
+  if (!ms.length) return;
+  const mobBefore = kingMobility(st, foe), edgeBefore = edgeDist(st, foe);
+  let best = null;
+  for (const m of ms){
+    if (m.captured) continue;                       // 绝不主动送上去换子
+    const nx = applyMove(st, m);
+    const sc = kingMobility(nx, foe) * 100 + edgeDist(nx, foe) * 12;
+    if (!best || sc > best.sc) best = {m, sc};
+  }
+  if (!best) best = {m: ms[0], sc: 0};
+  pzSnapshot();
+  const r = pzApply(best.m);
+  S.busy = false;
+
+  const why = [];
+  const mobAfter = kingMobility(S.st, foe), edgeAfter = edgeDist(S.st, foe);
+  if (mobAfter > mobBefore) why.push('<em>它在撑笼子：</em>活动格从 ' + mobBefore + ' 个变成了 ' + mobAfter + ' 个。');
+  else why.push('<em>笼子没撑开：</em>活动格还是 ' + mobAfter + ' 个，方向是对的。');
+  if (edgeAfter > edgeBefore) why.push('<em>注意：</em>它往中间退了一点，说明你上一手没把边线卡住 —— 王贴在边上才杀得掉。');
+  say({ from:'me', name:'黑方', san: r.cn, tag:'黑王逃跑',
+        text: '黑王从 ' + sqName(best.m.from) + ' 躲到 ' + sqName(best.m.to) + '，想找个更宽敞的地方。',
+        why: why.join('<br>') });
+  setChip('已经 ' + S.moves.length + ' 手 · 轮到你了');
+  render();
+}
+
+/* ---------------- 开局课堂 ---------------- */
+function loadLesson(i){
+  const n = LESSONS.length;
+  LS.idx = ((i % n) + n) % n;
+  LS.it = LESSONS[LS.idx];
+  renderCtl();
+  lessonGoto(0, true);
+  $('movesTitle').textContent = '本课着法';
+}
+
+function lessonGoto(k, silent){
+  const L = LS.it;
+  k = Math.max(0, Math.min(L.line.length, k));
+  resetState(parseFen(START_FEN), 'w');
+  S.busy = true;
+  setupStrips('w');
+  LS.cn = [];
+  say({ from:'coach', name:'教练', tag:'第 ' + (LS.idx+1) + ' / ' + LESSONS.length + ' 节 · ' + L.sub,
+        text: L.intro });
+  for (let i = 0; i < k; i++){
+    const sanWant = L.line[i][0];
+    const mv = moveFromSan(S.st, sanWant);
+    if (!mv) break;
+    const cn = cnSan(S.st, mv), san = toSan(S.st, mv), who = colorOf(mv.piece);
+    LS.cn.push(cn);
+    S.st = applyMove(S.st, mv);
+    S.moves.push({san, cn, color: who});
+    S.last = {from: mv.from, to: mv.to};
+    const last = (i === k - 1);
+    say({ from: who === 'w' ? 'coach' : 'me',
+          name: who === 'w' ? '白方' : '黑方', san: cn,
+          tag: last ? '第 ' + (i+1) + ' 步' : '', tagKind: last ? 'good' : '',
+          text: L.line[i][1] });
+  }
+  LS.step = k;
+  if (k >= L.line.length){
+    say({ from:'coach', name:'教练', tag:'本节结束',
+          text: '这条线走完了。上面「本节内容」里那几条要点再读一遍，然后点「下一节」。' });
+  }
+  setChip(k >= L.line.length ? '本节结束' : '第 ' + k + ' / ' + L.line.length + ' 步');
+  render();
+}
+
+/* ---------- 规则手册 ---------- */
+/* 把「走的这一步」说成一句人话：从哪一格到哪一格。
+   易位一步动两个子，所以要画两支箭头。 */
+function describeHint(st, mv, san){
+  const who = CN[typeOf(mv.piece)];
+  if (mv.castle){
+    const white = colorOf(mv.piece) === 'w';
+    const rookFrom = mv.castle === 'K' ? (white ? 63 : 7) : (white ? 56 : 0);
+    const rookTo = mv.castle === 'K' ? mv.to - 1 : mv.to + 1;
+    return {
+      label: cnSan(st, mv) + '（王 ' + sqName(mv.from) + ' → ' + sqName(mv.to) +
+             '，车 ' + sqName(rookFrom) + ' → ' + sqName(rookTo) + '）',
+      arrows: [{from: mv.from, to: mv.to}, {from: rookFrom, to: rookTo}]
+    };
+  }
+  return {
+    label: cnSan(st, mv) + '（' + who + ' ' + sqName(mv.from) + ' → ' + sqName(mv.to) + '）',
+    arrows: [{from: mv.from, to: mv.to}]
+  };
+}
+
+function loadRule(i){
+  const n = RULES.length;
+  RI.idx = ((i % n) + n) % n;
+  RI.it = RULES[RI.idx];
+  RI.demo = 0;
+  ruleShow();
+  $('movesTitle').textContent = '示范着法';
+}
+
+/* 摆出这一则的局面，并只给出「这一步怎么走」的提示：
+   棋盘停在走之前的样子，起止格高亮、再画一支箭头。点「走给你看」才真的走。
+   逼和 / 子力不足这种没有示范着法的局，就单纯把局面摆出来让人自己数。 */
+function ruleSetup(){
+  const R = RI.it;
+  const st0 = parseFen(R.fen);
+  resetState(st0, st0.turn);
+  S.busy = true;                       // 规则手册不自由走子，只按提示走这一手
+  setupStrips(st0.turn);
+  RI.cn = []; RI.played = false; RI.hint = null;
+
+  const d = (R.demos && R.demos.length) ? R.demos[RI.demo] : null;
+  if (d){
+    const mv = moveFromSan(S.st, d.line[0][0]);
+    if (mv){
+      RI.hint = describeHint(S.st, mv, d.line[0][0]);
+      S.hint = RI.hint.arrows;
+    }
+  }
+  return d;
+}
+
+function ruleShow(){
+  const R = RI.it;
+  const d = ruleSetup();
+  say({ from:'coach', name:'教练', tag:'第 ' + (RI.idx+1) + ' / ' + RULES.length + ' 则 · ' + R.t,
+        text: R.intro });
+  if (d && RI.hint){
+    say({ from:'coach', name:'教练', tag:'这一步 · ' + d.name, tagKind:'good',
+          text: '棋盘上画的就是这一步：<b>' + RI.hint.label + '</b>。<br>' +
+                '点下面的「走给你看」，或者直接点棋盘上高亮的那两格，我就把它走出来。' });
+    setChip('提示 · ' + d.name);
+  } else {
+    say({ from:'coach', name:'教练', tag:'看棋盘',
+          text: R.hint || '照着局面把上面那几条要点对一遍。' });
+    setChip('看局面');
+  }
+  renderCtl();
+  render();
+}
+
+/* 真的把示范着法走一遍 —— 走完棋盘才变成「之后」的样子 */
+function rulePlay(){
+  const R = RI.it;
+  const d = ruleSetup();
+  if (!d || !d.line.length) return;
+  say({ from:'coach', name:'教练', tag:'第 ' + (RI.idx+1) + ' / ' + RULES.length + ' 则 · ' + R.t,
+        text: R.intro });
+  for (const step of d.line){
+    const mv = moveFromSan(S.st, step[0]);
+    if (!mv) break;
+    const cn = cnSan(S.st, mv), san = toSan(S.st, mv), who = colorOf(mv.piece);
+    RI.cn.push(cn);
+    S.st = applyMove(S.st, mv);
+    S.moves.push({san, cn, color: who});
+    S.last = {from: mv.from, to: mv.to};
+    say({ from: who === 'w' ? 'coach' : 'me',
+          name: who === 'w' ? '白方' : '黑方', san: cn,
+          tag: '走给你看 · ' + d.name, tagKind: 'good', text: step[1] });
+  }
+  RI.played = true;
+  S.hint = null;
+  setChip('已走出 · ' + d.name);
+  renderCtl();
+  render();
+}
+
+/* ---------------- 模式切换 ---------------- */
+function setMode(m){
+  MODE = m;
+  Array.prototype.forEach.call($('modes').querySelectorAll('button'), b =>
+    b.classList.toggle('on', b.dataset.mode === m));
+  const play = m === 'play';
+  $('level').hidden = !play; $('levelLabel').hidden = !play; $('btnSwap').hidden = !play;
+  $('btnNew').hidden = !play;
+  $('legendBox').open = false;
+  if (m === 'play') newGame(S.human || 'w');
+  else if (m === 'lesson') loadLesson(LS.idx || 0);
+  else if (m === 'rules') loadRule(RI.idx || 0);
+  else loadPuzzle(0);
+  updateModeCnt();
+}
+
+function updateModeCnt(){
+  const box = $('modeCnt');
+  if (MODE === 'play'){ box.textContent = ''; return; }
+  if (MODE === 'lesson'){
+    box.textContent = '第 ' + (LS.idx + 1) + ' / ' + LESSONS.length + ' 节 · ' +
+      LS.step + ' / ' + (LS.it ? LS.it.line.length : 0) + ' 步';
+    return;
+  }
+  if (MODE === 'rules'){
+    box.textContent = '第 ' + (RI.idx + 1) + ' / ' + RULES.length + ' 则';
+    return;
+  }
+  const list = modeList();
+  let solved = 0;
+  list.forEach(it => { if (PZ.solved[(it.drill ? 'drill' : 'q') + it.fen]) solved++; });
+  box.textContent = list[0].drill ? ('共 ' + list.length + ' 个演练') :
+    ('第 ' + (PZ.idx + 1) + ' / ' + list.length + ' 题 · 已完成 ' + solved);
+}
+
+/* ---------------- 棋盘交互 ----------------
+   全站只有这一个棋盘点击处理器，按模式分流。 */
+boardEl.addEventListener('click', e => {
+  const cell = e.target.closest('.sq');
+  if (!cell || promoEl.style.display !== 'none') return;
+  const i = parseInt(cell.dataset.i, 10);
+
+  // 课堂、规则手册：不让自由走子
+  if (MODE === 'lesson') return;
+  if (MODE === 'rules'){
+    // 点高亮的两格 = 按提示把这步走出来
+    if (!RI.played && RI.hint && RI.hint.arrows.some(h => h.from === i || h.to === i)) rulePlay();
+    return;
+  }
+
+  const st = S.st, p = st.board[i];
+
+  if (MODE === 'play' && !playerTurn()) return;
+  if (MODE !== 'play' && (PZ.done || S.busy || PZ.revealed || st.turn !== S.human)) return;
+
+  const mv = S.targets.filter(m => m.to === i);
+  if (mv.length){
+    if (mv[0].promo){ askPromotion(i, mv); return; }
+    if (MODE === 'play') humanMove(mv[0]); else puzzleMove(mv[0]);
+    return;
+  }
+  if (p && colorOf(p) === S.human){
+    if (S.selected === i){ S.selected = -1; S.targets = []; render(); return; }
+    S.selected = i;
+    S.targets = legalMoves(st, S.human).filter(m => m.from === i);
+    S.hint = null;
+    render();
+    return;
+  }
+  S.selected = -1; S.targets = [];
+  render();
+});
+
+/* ---------------- 顶部控件 ---------------- */
+Array.prototype.forEach.call($('modes').querySelectorAll('button'), b => {
+  b.onclick = () => setMode(b.dataset.mode);
+});
+$('btnNew').onclick = () => { if (MODE === 'play') newGame(S.human); };
+$('btnSwap').onclick = () => { if (MODE === 'play') newGame(other(S.human)); };
+$('level').onchange = () => {
+  const lv = parseInt($('level').value, 10);
+  const txt = lv === 1 ? '对手换成「入门」：有一半的步会从前三名里随便挑一个，亏得比较明显，适合先把开局原则练熟。'
+            : lv === 2 ? '对手换成「进阶」：每步算 0.3 秒左右，三成概率在几乎等价的几步里换一个走 —— 同一个开局不会每次都一样。'
+            : '对手换成「较强」：每步算 1 秒以上，只有一成概率在差 0.1 兵以内的着法里换手，棋力几乎不掉，但开局不会每盘都重演。';
+  say({ from:'coach', name:'教练', tag:'设置', text: txt });
+};
+$('movesHd').onclick = () => $('movesBlock').classList.toggle('collapsed');
+
+/* 棋子字号随棋盘宽度自适应 */
+function fitPieces(){
+  const w = boardEl.clientWidth || 480;
+  boardEl.style.setProperty('--pcs', Math.round(w / 8 * 0.82) + 'px');
+}
+window.addEventListener('resize', fitPieces);
+
+setMode('play');
+fitPieces();
+
+</script>
+</body>
+</html>

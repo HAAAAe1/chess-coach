@@ -41,8 +41,18 @@ const document = {
 };
 const PZ_CHIP = () => document.getElementById('stateChip').textContent;
 const timers = [];
+/* 内存版 localStorage：语义跟真的对齐（含「没有的键返回 null」），但不落盘 */
+const store = {};
+const localStorage = {
+  getItem: k => (k in store ? store[k] : null),
+  setItem: (k, v) => { store[k] = String(v); },
+  removeItem: k => { delete store[k]; }
+};
 const window = {
+  localStorage,
   addEventListener(){},
+  clearTimeout(){},
+  requestAnimationFrame(fn){ timers.push(fn); return timers.length; },
   setTimeout(fn){ timers.push(fn); return timers.length; }
 };
 function drain(){ let i = 0; while (timers.length && i++ < 900) timers.shift()(); }

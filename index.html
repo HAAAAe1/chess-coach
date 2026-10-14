@@ -2,8 +2,24 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>国际象棋教练板 · 边下边讲</title>
+<meta name="description" content="会「边下边讲」的国际象棋教练：单个 HTML 文件、零依赖、手写引擎。对弈时你走一步它回一步，每一步都告诉你走了什么、为什么这么走、换别的会怎样；另含战术训练、将死训练、开局课堂与规则手册，棋谱全部用中文记法。" />
+<meta name="theme-color" content="#F5F1EA" />
+<meta name="color-scheme" content="light" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%232E3A33'/%3E%3Ctext x='32' y='47' font-size='42' text-anchor='middle' fill='%23F4EFE4'%3E%E2%99%9E%3C/text%3E%3C/svg%3E" />
+<!-- 分享出去时的那张卡片 -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="国际象棋教练板" />
+<meta property="og:title" content="国际象棋教练板 · 边下边讲" />
+<meta property="og:description" content="你走一步，我回一步 —— 每一步都告诉你怎么走、为什么这么走。手写引擎 + 战术训练 / 将死训练 / 开局课堂 / 规则手册，全中文记谱。" />
+<meta property="og:url" content="https://haaaae1.github.io/chess-coach/" />
+<meta property="og:image" content="https://haaaae1.github.io/chess-coach/screenshots/play.png" />
+<meta property="og:locale" content="zh_CN" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="国际象棋教练板 · 边下边讲" />
+<meta name="twitter:description" content="你走一步，我回一步 —— 每一步都告诉你怎么走、为什么这么走。" />
+<meta name="twitter:image" content="https://haaaae1.github.io/chess-coach/screenshots/play.png" />
 <style>
   :root{
     --bg:#F5F1EA; --panel:#FFFFFF; --panel2:#FBF8F2;
@@ -30,6 +46,7 @@
     font-family:"Inter","Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
     -webkit-font-smoothing:antialiased;
     min-height:100vh;
+    min-height:100dvh;      /* 手机上按真实可视高度算，不被地址栏顶出去 */
     padding:28px 24px 48px;
   }
   .wrap{max-width:1180px;margin:0 auto}
@@ -59,6 +76,9 @@
   button:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
   button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   button.primary:hover{border-color:#28583F;background:#2A5F46}
+  /* 「重置进度」等确认的那一下 */
+  button.danger{background:var(--bad);border-color:var(--bad);color:#fff}
+  button.danger:hover{border-color:#8E3627;background:#9A3B2B}
   select{padding-right:10px;background-image:none}
 
   /* ---------- layout ---------- */
@@ -175,6 +195,8 @@
   .audit .row .ic{flex:0 0 auto;width:13px;text-align:center;font-size:11px;line-height:1.7;color:var(--faint)}
   .audit .row.bad .ic{color:var(--bad)}
   .audit .row.good .ic{color:var(--accent)}
+  /* 「眼下没有白送的子」用的也是 ✓，之前漏了这条，图标一直是灰的 */
+  .audit .row.ok .ic{color:var(--accent)}
   .audit .row.bad b{color:var(--bad)}
   .audit .row.good b{color:var(--accent)}
   .audit b{font-weight:650}
@@ -299,6 +321,58 @@
   .legend table{width:100%;border-collapse:collapse}
   .legend td{padding:3px 10px 3px 0;vertical-align:top;border-bottom:1px solid var(--line2)}
   .legend td:first-child{width:96px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#2E3A33;white-space:nowrap}
+
+  /* ================================================================
+     窄屏：手机 / 竖屏平板
+     桌面那套「右栏正好一屏高」的算法在手机上会算错 —— 地址栏会伸缩、
+     标题和模式条都会换行，212px 这个常数不再成立。所以窄屏直接放弃定高，
+     让内容自己撑，只给解说区和棋谱区各留一个上限。
+     必须放在所有组件样式之后，否则同权重会被上面的基础规则盖回去。
+     ================================================================ */
+  @media (max-width:720px){
+    body{padding:16px 12px 34px;padding-bottom:calc(34px + env(safe-area-inset-bottom))}
+    header{align-items:flex-start;gap:12px;margin-bottom:15px}
+    .mark{width:38px;height:38px;border-radius:12px;font-size:21px}
+    h1{font-size:18px}
+    .sub{font-size:12px;margin-top:3px}
+    .top-actions{width:100%;gap:8px}
+    .top-actions select{flex:1 1 120px;min-width:0}
+
+    /* 五个模式横着排，装不下就滑动，不折成两行白占高度 */
+    .modes{flex-wrap:nowrap;overflow-x:auto;margin-bottom:14px;padding:5px;scrollbar-width:none}
+    .modes::-webkit-scrollbar{display:none}
+    .modes button{padding:8px 12px;font-size:12.5px;white-space:nowrap}
+    .modes .sp{display:none}
+    .modes .cnt{padding:0 6px}
+
+    .app{gap:14px}
+    .boardcard{padding:12px}
+    .strip{gap:9px;min-height:40px}
+    .avatar{width:30px;height:30px;border-radius:10px;font-size:16px}
+    .who{font-size:12.5px}
+    .who small{font-size:10.5px}
+    .tray{font-size:15px}
+    .boardwrap{margin:8px 0}
+    .sq .co{font-size:9px}
+
+    .panel{height:auto;min-height:0}
+    .audit{max-height:none;padding:10px 13px 11px}
+    .feed{max-height:58vh;padding:13px 14px 6px;gap:12px}
+    .moves{max-height:34vh;padding:0 14px 10px}
+    .movesblock:has(details[open]) .moves{max-height:min(58vh,340px)}
+    .movesblock .mh{padding:9px 14px}
+
+    .ctl{gap:7px;margin-top:11px}
+    button,select{padding:8px 12px;font-size:12.5px}
+    .ctl button.sm{padding:7px 10px;font-size:12px}
+  }
+  @media (max-width:400px){
+    h1{font-size:16.5px}
+    .sub{display:none}
+    .modes button{padding:7px 10px;font-size:12px}
+    .boardcard{padding:10px}
+    .msg .txt{font-size:13px}
+  }
 </style>
 </head>
 <body>
@@ -320,6 +394,7 @@
       </select>
       <button id="btnSwap" title="换边重开">换边</button>
       <button id="btnNew" class="primary">新对局</button>
+      <button id="btnForget" title="清除本地保存的进度：已完成的题目、上次的模式与难度">重置进度</button>
     </div>
   </header>
 
@@ -1159,19 +1234,28 @@ function analyze(st, opts){
    gamble = 有多少概率不选首选，而在「几乎一样好」的几步里换一个；
    slack  = 允许差多少分（1 分 = 百分之一兵）还算「一样好」；
    top    = 拿前几名来比较。注意 top 必须是 2 以上，否则候选池里只有一步，永远换不了。 */
+/* slack 是「允许多亏多少分（百分之一兵）」的容忍度，用来圈出候选池。
+   注意：slack × top 是联动的——池子要先装得下第二手，骰子才掷得出东西。
+   较强档原来 slack:12 配 top:3，前 3 名里几乎没有第二步能落在 0.12 兵以内，
+   于是 pool 恒为 1、换手率实测 0~2%，等于「固定开局」。放到 0.30 兵（业余对局里无感，
+   远小于半个兵）并把候选扩到前 4 名，换手才真的发生，棋力也不掉。 */
 const LEVELS = {
   1: {label:'入门', maxDepth: 2,  timeMs: 140,  slack: 70, gamble: 0.5,  top: 3},
   2: {label:'进阶', maxDepth: 6,  timeMs: 340,  slack: 22, gamble: 0.30, top: 3},
-  3: {label:'较强', maxDepth: 24, timeMs: 1100, slack: 12, gamble: 0.15, top: 3}
+  3: {label:'较强', maxDepth: 24, timeMs: 1100, slack: 30, gamble: 0.15, top: 4}
 };
 
-function engineChoose(st, level){
+/* rnd 是随机源，只有测试会传进来（传一个固定序列就能确定性地验证换手逻辑）。
+   正常对局走 Math.random。 */
+function engineChoose(st, level, rnd){
+  const rand = typeof rnd === 'function' ? rnd : Math.random;
   const cfg = LEVELS[level] || LEVELS[2];
   const r = analyze(st, {maxDepth: cfg.maxDepth, timeMs: cfg.timeMs});
   if (!r.move) return null;
   r.picked = false;
+  r.poolSize = 0;
   // 先掷骰子，再决定要不要多花时间 —— 掷不中就一步都不多算
-  const roll = cfg.gamble > 0 && r.ordered.length > 1 && Math.random() < cfg.gamble;
+  const roll = cfg.gamble > 0 && r.ordered.length > 1 && rand() < cfg.gamble;
   if (roll){
     // 没被搜进 PV 的着法只有上界，不能直接拿来比大小——
     // 把前几名用全窗口精确重算一遍，再在里面挑
@@ -1184,8 +1268,9 @@ function engineChoose(st, level){
     if (cand.length){
       const top = cand[0].score;
       const pool = cand.filter(x => x.score >= top - cfg.slack);
+      r.poolSize = pool.length;
       if (pool.length > 1){
-        const take = pool[Math.floor(Math.random() * pool.length)];
+        const take = pool[Math.floor(rand() * pool.length)];
         if (encM(take.move) !== encM(r.ordered[0].move)){
           r.picked = true;
           r.score = take.score;      // 换过的那一步分值要跟着改，解说里才不撒谎
@@ -1248,6 +1333,69 @@ const boardEl = $('board'), feedEl = $('feed'), promoEl = $('promo'), promoRow =
 
 const HUMAN_AN = {maxDepth: 6, timeMs: 340};   // 给玩家这步打分用的固定预算
 const HINT_AN  = {maxDepth: 10, timeMs: 900};  // 提示按钮给得更足
+
+/* ================================================================
+   本地记忆：把「上次停在哪」记住，刷新之后不用从头再来
+   只存进度指针（模式 / 难度 / 执子方 / 完成的题 / 课程与规则的位置），
+   不存棋局本身 —— 这里不是存档，是接着玩。写失败一律静默降级：
+   无痕模式、禁用存储、配额满了都不该让页面报错。
+   ================================================================ */
+const MEM_KEY = 'chess-coach:progress:v1';
+const MODE_NAMES = ['play','tactic','mate','lesson','rules'];
+let MEM = (function(){
+  try { return JSON.parse(window.localStorage.getItem(MEM_KEY)) || {}; }
+  catch (e){ return {}; }
+})();
+let memTimer = 0, forgetTimer = 0;
+
+function remember(){
+  // 快照要「在调用的这一刻」就取好，只有落盘才延后。
+  // 反过来的话，300ms 内连着切模式，回调执行时 MODE 已经变了 ——
+  // 题目位置会被记到另一套题上，执子方会被题目的先手覆盖掉。
+  MEM.mode   = MODE;
+  MEM.level  = parseInt($('level').value, 10) || 2;
+  MEM.lesson = LS.idx;
+  MEM.step   = LS.step;
+  MEM.rule   = RI.idx;
+  MEM.solved = PZ.solved;
+  MEM.pz = MEM.pz && typeof MEM.pz === 'object' ? MEM.pz : {};
+  // 两套训练题各记各的位置，互不覆盖
+  if (MODE === 'tactic' || MODE === 'mate') MEM.pz[MODE] = PZ.idx;
+  // 执子方只在真正对弈时才有意义；训练题里 S.human 是题目规定的先手，
+  // 拿它去覆盖「你要执哪一方」是错的
+  if (MODE === 'play') MEM.human = S.human;
+
+  window.clearTimeout(memTimer);
+  memTimer = window.setTimeout(function(){
+    try { window.localStorage.setItem(MEM_KEY, JSON.stringify(MEM)); } catch (e){}
+  }, 280);
+}
+
+function forgetProgress(){
+  try { window.localStorage.removeItem(MEM_KEY); } catch (e){}
+  MEM = {};
+  PZ.solved = {};
+  updateModeCnt();
+  renderAudit();
+  say({ from:'coach', name:'教练', tag:'已重置',
+        text:'本地记录清掉了：已完成的题目、上次的模式和难度都回到默认。棋盘上的这一局不受影响。' });
+}
+
+/* 顶栏的「重置进度」：点第一次变成「确定清空？」，3 秒内再点一下才真清 ——
+   这点小事不值得弹一个系统对话框打断人。 */
+function armForget(){
+  const b = $('btnForget');
+  const reset = function(){ delete b.dataset.armed; b.textContent = '重置进度'; b.classList.remove('danger'); };
+  if (b.dataset.armed){
+    window.clearTimeout(forgetTimer);
+    reset(); forgetProgress();
+    return;
+  }
+  b.dataset.armed = '1';
+  b.textContent = '确定清空？';
+  b.classList.add('danger');
+  forgetTimer = window.setTimeout(reset, 3000);
+}
 
 let S = {
   st: parseFen(START_FEN),
@@ -2333,7 +2481,8 @@ function askPromotion(to, mvs){
    模式与训练流程
    ================================================================ */
 let MODE = 'play';
-let PZ = { list:[], idx:0, it:null, step:0, tries:0, done:false, revealed:false, undo:[], solved:{} };
+let PZ = { list:[], idx:0, it:null, step:0, tries:0, done:false, revealed:false, undo:[],
+           solved: (MEM.solved && typeof MEM.solved === 'object') ? MEM.solved : {} };
 let LS = { idx:0, it:null, step:0, cn:[] };
 let RI = { idx:0, it:null, demo:0, cn:[], played:false, hint:null };
 
@@ -2504,6 +2653,7 @@ function newGame(human){
     render();
     window.setTimeout(engineTurn, 400);
   }
+  remember();
 }
 
 /* ---------------- 题目：加载 ---------------- */
@@ -2525,6 +2675,7 @@ function loadPuzzle(i){
         '<em>要求：</em>找出一着手（或多手）达成目标。走错了我不动棋盘，你可以接着想 —— 想不出来再点「提示」和「看答案」。'
   });
   render();
+  remember();
 }
 
 /* ---------------- 题目：走子 ---------------- */
@@ -2630,6 +2781,7 @@ function pzWin(){
   setChip('本题完成', 'over');
   render();
   maybeAutoNext();
+  remember();
 }
 
 function maybeAutoNext(){ renderCtl(); }
@@ -2784,6 +2936,7 @@ function loadLesson(i){
   renderCtl();
   lessonGoto(0, true);
   $('movesTitle').textContent = '本课着法';
+  remember();
 }
 
 function lessonGoto(k, silent){
@@ -2817,6 +2970,7 @@ function lessonGoto(k, silent){
   }
   setChip(k >= L.line.length ? '本节结束' : '第 ' + k + ' / ' + L.line.length + ' 步');
   render();
+  remember();
 }
 
 /* ---------- 规则手册 ---------- */
@@ -2847,6 +3001,7 @@ function loadRule(i){
   RI.demo = 0;
   ruleShow();
   $('movesTitle').textContent = '示范着法';
+  remember();
 }
 
 /* 摆出这一则的局面，并只给出「这一步怎么走」的提示：
@@ -2925,11 +3080,28 @@ function setMode(m){
   $('level').hidden = !play; $('levelLabel').hidden = !play; $('btnSwap').hidden = !play;
   $('btnNew').hidden = !play;
   $('legendBox').open = false;
-  if (m === 'play') newGame(S.human || 'w');
+  // 回到对弈时，还是你上次执的那一方（训练题里 S.human 是题目的先手，不能拿它当依据）
+  if (m === 'play') newGame(MEM.human === 'b' ? 'b' : MEM.human === 'w' ? 'w' : (S.human || 'w'));
   else if (m === 'lesson') loadLesson(LS.idx || 0);
   else if (m === 'rules') loadRule(RI.idx || 0);
-  else loadPuzzle(0);
+  // 训练题回到上次那一题，而不是每次都从第一题开始
+  else loadPuzzle((MEM.pz && MEM.pz[m]) || 0);
   updateModeCnt();
+  remember();
+}
+
+/* 从本地记忆回到上次停下的地方；没有记录就走默认（对弈、进阶、执白） */
+function restoreSession(){
+  if (MEM.level) $('level').value = String(MEM.level);
+  LS.idx = MEM.lesson || 0;
+  RI.idx = MEM.rule || 0;
+  const m = MODE_NAMES.indexOf(MEM.mode) >= 0 ? MEM.mode : 'play';
+  // 先把步数读出来：setMode 会走 loadLesson → lessonGoto(0)，而 lessonGoto 末尾
+  // 会 remember() 把 MEM.step 覆盖成 0，等 setMode 返回再读就已经是 0 了
+  const step = m === 'lesson' ? (MEM.step || 0) : 0;
+  setMode(m);
+  // 打开就停在课程里，才把讲到第几步也接上；自己点进课程则是从头讲一遍
+  if (step) lessonGoto(step);
 }
 
 function updateModeCnt(){
@@ -3001,7 +3173,9 @@ $('level').onchange = () => {
             : lv === 2 ? '对手换成「进阶」：每步算 0.3 秒左右，三成概率在几乎等价的几步里换一个走 —— 同一个开局不会每次都一样。'
             : '对手换成「较强」：每步算 1 秒以上，只有一成概率在差 0.1 兵以内的着法里换手，棋力几乎不掉，但开局不会每盘都重演。';
   say({ from:'coach', name:'教练', tag:'设置', text: txt });
+  remember();
 };
+$('btnForget').onclick = armForget;
 $('movesHd').onclick = () => $('movesBlock').classList.toggle('collapsed');
 
 /* 棋子字号随棋盘宽度自适应 */
@@ -3010,9 +3184,12 @@ function fitPieces(){
   boardEl.style.setProperty('--pcs', Math.round(w / 8 * 0.82) + 'px');
 }
 window.addEventListener('resize', fitPieces);
+window.addEventListener('orientationchange', () => window.setTimeout(fitPieces, 120));
 
-setMode('play');
+restoreSession();
 fitPieces();
+// 首帧的宽度可能要等字体和样式落定，量早了一次会算出偏小的字号
+window.requestAnimationFrame(function(){ fitPieces(); });
 
 </script>
 </body>

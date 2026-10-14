@@ -92,32 +92,67 @@ for (const lv of [1, 2, 3]){
 if (anySwap === 0) bad('三档四个局面全都没换过手 —— gamble 形同虚设');
 else ok('随机换手机制确实在工作（合计 ' + anySwap + ' 次）');
 
-console.log('\n===== C. 库外局面：候选池装得下第二步，且骰子能换手 =====');
+console.log('\n===== C. 候选池装得下第二步，且骰子能换手 =====');
 {
-  // 1.c4 —— 开局库里没有这条线（见上一轮的库盘点），全靠搜索 + gamble
-  const st = A.parseFen(START);
-  const m = A.legalMoves(st, 'w').find(x => A.toSan(st, x) === 'c4');
-  const st2 = A.applyMove(st, m);
+  /* 这一节测的是 engineChoose，也就是中局阶段的换手机制 —— 它不看开局库
+     （开局库只在 enginePick 里查），所以直接用一个安静的中局局面。
+     以前这里用「1.c4 之后」的局面并称其为库外局面，而现在 1.c4 已经是库内线路，
+     那个前提不成立了，换成真正的中局局面。 */
+  const st2 = A.parseFen(MID);
 
-  console.log('  1.c4 之后：各档自己算自己的首选（档位不同深度不同，首选本来就可能不一样，不能混用）');
+  console.log('  安静中局。各档自己算自己的首选（档位不同深度不同，首选本来就可能不一样，不能混用）');
   console.log('    较强档首轮搜索得到 ' + A.toSan(st2, A.analyze(st2, {maxDepth: A.LEVELS[3].maxDepth, timeMs: A.LEVELS[3].timeMs}).move));
 
   // (1) 池子必须装得下第二手 —— 这是「随机策略真的能生效」的前提。
-  //     用多次采样取池子大小的最大值：只要出现过 >1，就说明掷中时确实有得挑。
-  //     这比对「出现了几种应法」做统计断言稳得多（后者受采样次数影响，会偶发红叉）。
+  //
+  //     怎么测：注入一个**必定掷中**的随机源（返回 0，小于任何 gamble），
+  //     且它的第二次调用返回 0 → 抽中池首位 → 结果等于首选、picked 保持 false，
+  //     但 poolSize 被确定性地填上了。这样量到的是真正的池子大小，不是在量骰子的运气
+  //     （用真实 Math.random 采样的话，较强档 15% 的掷中率会让大半样本读到 poolSize = 0，
+  //     看起来像「池子是 0 手」）。
+  //
+  //     另两个必须知道的点：
+  //     ① 池子大小是**局面相关**的。有些局面前几名分差本来就大于 slack，池子合法地只有 1 手
+  //        （实测：西西里中局在进阶/较强档就是 1 手）。所以不能拿单个局面下断言 ——
+  //        那等于在断言「这个局面恰好有多种等价走法」，是在断言局面而不是在断言配置。
+  //        正确做法：在一组局面上看，只要某一档**在任何局面上**都装不下第二手，才是配错了。
+  //     ② 池子里的分数是 scoreMove 现算的（深度 ≤5、220ms），所以还留了一点计时敏感，
+  //        取多次采样的最大值即可。
+  const POOL_POS = [
+    ['起始局面',         START],
+    ['安静中局',         MID],
+    ['1.e4 之后（黑走）', 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1'],
+    ['1.d4 d5 之后',     'rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq d6 0 2'],
+    ['意大利核心',       'r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 4 5'],
+    ['西西里中局',       'r1bqkb1r/1p2pppp/p1np1n2/8/3NP3/2N1B3/PPP2PPP/R2QKB1R w KQkq - 0 8']
+  ];
+  const alwaysRolls = () => 0;      // 掷中 + 抽首位
+  const matrix = {};
+  for (const lv of [1, 2, 3]){
+    matrix[lv] = POOL_POS.map(([, fen]) => {
+      const st = A.parseFen(fen);
+      let maxPool = 0;
+      for (let k = 0; k < 3; k++){
+        const r = A.engineChoose(st, lv, alwaysRolls);
+        maxPool = Math.max(maxPool, r ? (r.poolSize || 0) : 0);
+      }
+      return maxPool;
+    });
+  }
+  console.log('  各局面的候选池大小（注入「必定掷中」的随机源，直接读池子）：');
+  console.log('    ' + '局面'.padEnd(22) + [1,2,3].map(l => A.LEVELS[l].label.padStart(6)).join(''));
+  POOL_POS.forEach(([name], i) => {
+    console.log('    ' + name.padEnd(22) + [1,2,3].map(l => String(matrix[l][i]).padStart(6)).join(''));
+  });
   for (const lv of [1, 2, 3]){
     const cfg = A.LEVELS[lv];
-    let maxPool = 0, swaps = 0, kinds = new Set();
-    for (let k = 0; k < 20; k++){
-      const r = A.engineChoose(st2, lv);
-      maxPool = Math.max(maxPool, r.poolSize || 0);
-      if (r.picked) swaps++;
-      kinds.add(A.toSan(st2, r.move));
-    }
-    console.log('  [' + cfg.label + '] 20 次：候选池最大 ' + maxPool + ' 手，实际换手 ' + swaps +
-                ' 次，走出 ' + kinds.size + ' 种应法');
-    if (maxPool < 2) bad('「' + cfg.label + '」候选池恒为 1 手 —— 骰子掷中也换不动，等于固定应法');
-    else ok('「' + cfg.label + '」候选池最多 ' + maxPool + ' 手可选');
+    const vals = matrix[lv];
+    const best = Math.max(...vals);
+    const multi = vals.filter(v => v >= 2).length;
+    if (best < 2) bad('「' + cfg.label + '」在 ' + vals.length + ' 个局面上候选池全是 1 手 —— 骰子掷中也换不动');
+    else if (multi * 2 < vals.length) bad('「' + cfg.label + '」只有 ' + multi + ' / ' + vals.length +
+      ' 个局面装得下第二手，太少 —— top / slack 偏紧');
+    else ok('「' + cfg.label + '」最多 ' + best + ' 手可选；' + multi + ' / ' + vals.length + ' 个局面有多候选');
   }
 
   // (2) 确定性验证换手路径：注入固定随机序列，不再依赖概率。
